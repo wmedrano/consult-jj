@@ -8,7 +8,7 @@
 ;; Helpers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun consult-jj-test--sh (&rest commands)
+(defun consult-jj-test-sh (&rest commands)
   "Run shell COMMAND and additional COMMANDS, asserting each succeeds.
 
 Each command may be a string or a list of strings (which are concatenated).
@@ -20,13 +20,33 @@ Runs synchronously in `default-directory'; output is discarded."
 
 (defmacro with-test-jj-repo (&rest body)
   `(let ((default-directory (make-temp-file "consult-jj-test" t)))
-     (consult-jj-test--sh "jj git init")
+     (consult-jj-test-sh "jj git init")
      ,@body))
 
 
-(defun consult-jj-test--write-file (filename contents)
+(defun consult-jj-test-write-file (filename contents)
   "Write CONTENTS to FILENAME, overwriting if it exists."
   (write-region contents nil filename nil 'silent))
+
+(defun consult-jj-test-revision-json (fields)
+  "Serialize revision metadata FIELDS as JSON, mimicking jj log output.
+
+This is the inverse of `consult-jj-test-fields-to-revision'."
+  (mapconcat (lambda (field-spec)
+               (let ((pair (assq (car field-spec) fields)))
+                 (unless pair
+                   (error "Missing revision field %s" (car field-spec)))
+                 (json-serialize (cdr pair))))
+             consult-jj--revision-fields
+             ""))
+
+(defun consult-jj-test-fields-to-revision (fields)
+  "Build a `consult-jj--revision' from FIELDS.
+
+This is the inverse of `consult-jj-test-revision-json'."
+  (apply #'consult-jj--make-revision
+         (cl-loop for (field . value) in fields
+                  append (list field value))))
 
 (defun consult-jj-test-buffer-string (buffer)
   "Get the string for `buffer'.
@@ -55,10 +75,10 @@ Waits for all processes in buffer to terminate before getting the string."
 
 (ert-deftest consult-jj--log ()
   (with-test-jj-repo
-   (consult-jj-test--sh
+   (consult-jj-test-sh
     "jj bookmark set mybookmark"
-    (list "jj" "commit" "-m" "initial-commit")
-    (list "jj" "commit" "-m" "second-commit")
+    "jj commit -m initial-commit"
+    "jj commit -m second-commit"
     "jj new mybookmark")
    (let* ((buffer (consult-jj--log))
           (result (consult-jj-test-buffer-string buffer)))
@@ -97,11 +117,100 @@ Waits for all processes in buffer to terminate before getting the string."
                   "◆  zzzzzzzz root() 00000000" eol)
               result)))))
 
+(ert-deftest consult-jj--log-finalize ()
+  ;; when the log contains JSON metadata, then the metadata is removed from
+  ;; the display and attached to overlays on the corresponding revisions
+  (let ((rev1-fields '((:change-id          . "abc123")
+                       (:change-id-shortest . "abc")
+                       (:commit-id          . "aaa111")
+                       (:description        . "first commit")
+                       (:bookmarks          . ["mybookmark"])))
+        (rev2-fields '((:change-id          . "def456")
+                       (:change-id-shortest . "def")
+                       (:commit-id          . "bbb222")
+                       (:description        . "second commit")
+                       (:bookmarks          . []))))
+    (with-temp-buffer
+      (insert
+       "@  " (consult-jj-test-revision-json rev1-fields)
+       "abc123 author 2024-01-01 00:00:00\n"
+       "│  first commit\n"
+       "○  " (consult-jj-test-revision-json rev2-fields)
+       "def456 author 2024-01-01 00:00:00\n"
+       "│  second commit\n")
+      (consult-jj--log-finalize)
+      (let ((revisions (mapcar
+                        (lambda (overlay) (overlay-get overlay 'consult-jj--revision))
+                        (overlays-in (point-min) (point-max)))))
+        (should (string-equal
+                 (buffer-string)
+                 "@  abc123 author 2024-01-01 00:00:00\n│  first commit\n○  def456 author 2024-01-01 00:00:00\n│  second commit\n"))
+        (should buffer-read-only)
+        (should (equal
+                 revisions
+                 (list (consult-jj-test-fields-to-revision rev1-fields)
+                       (consult-jj-test-fields-to-revision rev2-fields))))))))
+
+(ert-deftest consult-jj--log-candidates-no-description ()
+  ;; when a revision has no description, then the candidate shows
+  ;; "(no description set)" styled with font-lock-comment-face
+  (with-temp-buffer
+    (insert
+     "@  " (consult-jj-test-revision-json
+            '((:change-id          . "abc12345")
+              (:change-id-shortest . "abc")
+              (:commit-id          . "aaa111")
+              (:description        . "")
+              (:bookmarks          . [])))
+     "abc123 author 2024-01-01 00:00:00\n"
+     "│\n")
+    (consult-jj--log-finalize)
+    (let* ((candidates (consult-jj--log-candidates (current-buffer)))
+           (candidate (car candidates)))
+      (should (= (length candidates) 1))
+      (let ((pos (string-search "(no description set)" (car candidate))))
+        (should pos)
+        (should (eq (get-text-property pos 'face (car candidate))
+                    'font-lock-comment-face))))))
+
+
+
+(ert-deftest consult-jj--log-candidates ()
+  ;; when the log contains revision overlays, then candidates maps display
+  ;; text to the corresponding overlays
+  (with-test-jj-repo
+   (consult-jj-test-write-file "file.txt" "contents")
+   (consult-jj-test-sh
+    "jj bookmark set mybookmark"
+    "jj commit -m first-commit")
+   (let* ((buffer (consult-jj--log))
+          (candidates (consult-jj--log-candidates buffer))
+          (commit (nth 1 candidates)))
+     (should (= (length candidates) 3)) ;; Contains root, commit, working-copy
+     ;; the second candidate maps text to an overlay carrying revision metadata
+     (should (overlayp (cdr commit)))
+     (should (consult-jj--revision-p
+              (overlay-get (cdr commit) 'consult-jj--revision)))
+     ;; the text is the change id (8 chars), description, and bookmarks
+     (should (string-match-p
+              (rx bol (repeat 8 (any alnum)) (0+ " " (1+ (not (any "\n")))) eol)
+              (car commit)))
+     ;; the change id is styled with consult-jj-change-id
+     (should (eq (get-text-property 0 'face (car commit))
+                 'consult-jj-change-id))
+     ;; the bookmarks are styled with consult-jj-bookmark
+     (let ((bookmark-pos (string-search "mybookmark" (car commit))))
+       (should bookmark-pos)
+       (should (eq (get-text-property bookmark-pos 'face (car commit))
+                   'consult-jj-bookmark))))))
+
+
+
 (ert-deftest consult-jj-diff-at ()
   ;; when the revision adds two files, then consult-jj-diff-at shows both diffs
   (with-test-jj-repo
-   (consult-jj-test--write-file "file1.txt" "file1.txt")
-   (consult-jj-test--write-file "file2.txt" "file2.txt")
+   (consult-jj-test-write-file "file1.txt" "file1.txt")
+   (consult-jj-test-write-file "file2.txt" "file2.txt")
    (should (string-equal
             (consult-jj-test-buffer-string (consult-jj-diff-at "@"))
             "diff --git a/file1.txt b/file1.txt
@@ -124,8 +233,8 @@ new file mode 100644\nindex 0000000000..c3ee11c8b3
             "")))
   ;; when the commit is two revisions back, then consult-jj-diff-at "@--" shows its diff
   (with-test-jj-repo
-   (consult-jj-test--write-file "file1.txt" "file1.txt")
-   (consult-jj-test--sh "jj new" "jj new")
+   (consult-jj-test-write-file "file1.txt" "file1.txt")
+   (consult-jj-test-sh "jj new" "jj new")
    (should (string-equal
             (consult-jj-test-buffer-string (consult-jj-diff-at "@--"))
             "diff --git a/file1.txt b/file1.txt
@@ -141,10 +250,10 @@ index 0000000000..39cd5762dc
 (ert-deftest consult-jj-diff-from ()
   ;; when files changed since, then consult-jj-diff-from shows both diffs
   (with-test-jj-repo
-   (consult-jj-test--write-file "file1.txt" "one\n")
-   (consult-jj-test--sh "jj new")
-   (consult-jj-test--write-file "file1.txt" "two\n")
-   (consult-jj-test--write-file "newfile.txt" "newfile\n")
+   (consult-jj-test-write-file "file1.txt" "one\n")
+   (consult-jj-test-sh "jj new")
+   (consult-jj-test-write-file "file1.txt" "two\n")
+   (consult-jj-test-write-file "newfile.txt" "newfile\n")
    (should (string-equal
             (consult-jj-test-buffer-string (consult-jj-diff-from "@-"))
             "diff --git a/file1.txt b/file1.txt
@@ -164,8 +273,8 @@ index 0000000000..aa39060d7e
 ")))
   ;; when nothing changed, then consult-jj-diff-from returns an empty buffer
   (with-test-jj-repo
-   (consult-jj-test--write-file "file1.txt" "one\n")
-   (consult-jj-test--sh "jj new")
+   (consult-jj-test-write-file "file1.txt" "one\n")
+   (consult-jj-test-sh "jj new")
    (should (string-equal
             (consult-jj-test-buffer-string (consult-jj-diff-from "@-"))
             ""))))
