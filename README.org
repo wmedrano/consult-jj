@@ -10,6 +10,8 @@ JJ integration for Emacs.
 | ~consult-jj-diff~      | Show the diff of a revision in a ~*jj-diff*~ buffer; with a prefix argument, behave as ~consult-jj-diff-from~. |
 | ~consult-jj-diff-at~   | Show the diff of a revision in a ~*jj-diff*~ buffer; prompts for a revision.                                   |
 | ~consult-jj-diff-from~ | Show the diff of the working copy from a revision in a ~*jj-diff*~ buffer;  prompts for a revision.            |
+| ~consult-jj-new~       | Create a new change on top of a revision; prompts for a revision.                                              |
+| ~consult-jj-edit~      | Move the working copy to a revision; prompts for a revision.                                                   |
 
 * Configuration
 

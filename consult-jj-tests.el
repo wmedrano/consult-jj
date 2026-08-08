@@ -58,6 +58,13 @@ Waits for all processes in buffer to terminate before getting the string."
         (sleep-for 0.01)))
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defvar consult-jj-test-message nil
+  "Message captured by the `display-message-or-buffer' stub.")
+
+(defun consult-jj-test-display-message-or-buffer (msg)
+  "Capture MSG in `consult-jj-test-message'."
+  (setq consult-jj-test-message msg))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tests
@@ -365,3 +372,46 @@ index 0000000000..aa39060d7e
    (should (string-equal
             (consult-jj-test-buffer-string (consult-jj-diff-from "@-"))
             ""))))
+
+(ert-deftest consult-jj-new ()
+  ;; jj new creates a change on top of the revision and shows the result
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (let ((parent-change-id (consult-jj--rev-change-id "@")))
+     (cl-letf (((symbol-function 'display-message-or-buffer)
+                #'consult-jj-test-display-message-or-buffer))
+       (setq consult-jj-test-message nil)
+       (consult-jj-new "@")
+       (should (string-equal (consult-jj--rev-change-id "@-")
+                             parent-change-id))
+       (should (string-match-p "Working copy"
+                               consult-jj-test-message)))))
+
+  ;; when the command fails, then a jj-error is signaled
+  (with-test-jj-repo
+   (cl-letf (((symbol-function 'display-message-or-buffer)
+              #'consult-jj-test-display-message-or-buffer))
+     (should-error (consult-jj-new "nonexistent-rev")
+                   :type 'jj-error))))
+
+(ert-deftest consult-jj-edit ()
+  ;; jj edit moves the working copy to the revision and shows the result
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (let ((target-change-id (consult-jj--rev-change-id "@-")))
+     (cl-letf (((symbol-function 'display-message-or-buffer)
+                #'consult-jj-test-display-message-or-buffer))
+       (setq consult-jj-test-message nil)
+       (consult-jj-edit "@-")
+       (should (string-equal (consult-jj--rev-change-id "@")
+                             target-change-id))
+       (should (string-match-p "Working copy"
+                               consult-jj-test-message)))))
+
+  ;; when the command fails, then a jj-error is signaled
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (cl-letf (((symbol-function 'display-message-or-buffer)
+              #'consult-jj-test-display-message-or-buffer))
+     (should-error (consult-jj-edit "nonexistent-rev")
+                   :type 'jj-error))))

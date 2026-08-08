@@ -244,6 +244,18 @@ change id (trimmed to 8 characters), description, and bookmarks."
                                                " "))))
                        (cons text overlay)))))
 
+(defun consult-jj--rev-change-id (rev)
+  "Get the change id of REV."
+  (with-temp-buffer
+    (let ((status (call-process consult-jj-executable nil t nil
+                                "--color" "never" "--no-pager"
+                                "log" "--no-graph" "-r" rev
+                                "-T" "json(change_id)")))
+      (unless (zerop status)
+        (error "JJ log failed: %s" (buffer-string)))
+      (goto-char (point-min))
+      (json-parse-buffer :object-type 'alist :array-type 'list))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Diff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,6 +314,41 @@ displayed with `diff-mode'."
   (goto-char (point-min))
   (diff-mode)
   (read-only-mode 1))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Commands
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun consult-jj--run-command (args)
+  "Run `jj' with ARGS and display its output.
+
+Runs synchronously and signals a `jj-error' on failure."
+  (with-temp-buffer
+    (let ((status (apply #'call-process consult-jj-executable nil t nil
+                         (append '("--color" "never" "--no-pager") args))))
+      (unless (zerop status)
+        (signal 'jj-error (buffer-string)))
+      (display-message-or-buffer (string-trim (buffer-string))))))
+
+;;;###autoload
+(defun consult-jj-new (&optional rev)
+  "Create a new change on top of revision REV.
+
+If REV is nil, then prompt with `completing-read', defaulting to \"@\".
+Runs `jj new' synchronously and displays its output."
+  (interactive)
+  (let ((rev (or rev (consult-jj--read-revision "jj new" "@"))))
+    (consult-jj--run-command `("new" ,rev))))
+
+;;;###autoload
+(defun consult-jj-edit (&optional rev)
+  "Move the working copy to revision REV.
+
+If REV is nil, then prompt with `completing-read', defaulting to \"@\".
+Runs `jj edit' synchronously and displays its output."
+  (interactive)
+  (let ((rev (or rev (consult-jj--read-revision "jj edit" "@"))))
+    (consult-jj--run-command `("edit" ,rev))))
 
 (provide 'consult-jj)
 ;;; consult-jj.el ends here
