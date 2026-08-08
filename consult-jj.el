@@ -12,6 +12,7 @@
 
 (require 'subr-x)
 (require 'cl-lib)
+(require 'ansi-color)
 
 (defgroup consult-jj nil
   "JJ integration for consult."
@@ -68,6 +69,7 @@ Returns the buffer."
 (cl-defun consult-jj--start-process (args &key on-done)
   "Start a `jj' process with ARGS.
 
+COLOR is passed to the `--color' flag; it defaults to \"never\".
 ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
          (final-args (append '("--color" "never" "--no-pager")
@@ -91,12 +93,18 @@ ON-DONE is called in the process buffer when the process exits."
 
 PROMPT-PREFIX is prepended to the prompt.
 DEFAULT-REVISION is offered as the default."
-  (let* ((jj-log-buffer        (if consult-jj-log-preview (consult-jj--log)))
-         (display-action-alist '((side . bottom)
-                                 (window-parameters . ((mode-line-format . none)))))
-         (jj-log-window        (if jj-log-buffer
-                                   (display-buffer-in-side-window jj-log-buffer
-                                                                  display-action-alist))))
+  (let* ((active        t)
+         (jj-log-window nil)
+         (show-log      (lambda (buffer)
+                          (when active
+                            (setq jj-log-window
+                                  (display-buffer-in-side-window
+                                   buffer
+                                   '((side              . bottom)
+                                     (window-height     . fit-window-to-buffer)
+                                     (window-parameters . ((mode-line-format . none))))))))))
+    (if consult-jj-log-preview
+        (consult-jj--log :on-done show-log))
     (unwind-protect
         (let* ((candidates nil)
                (rev        (thread-first  "%s revision (default %s): "
@@ -105,30 +113,29 @@ DEFAULT-REVISION is offered as the default."
                                           string-trim)))
           (if (string-empty-p rev)
               default-revision rev))
+      (setq active nil)
       (when (and jj-log-window (window-live-p jj-log-window))
         (delete-window jj-log-window)))))
 
-(defun consult-jj--log ()
-  "Show the diff of revision REV in a \"*jj-diff*\" buffer.
+(cl-defun consult-jj--log (&key on-done)
+  "Show the `jj log' output in a \"*jj-log*\" buffer.
 
-If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
-diff is generated asynchronously and displayed with `diff-mode'."
+The log is generated asynchronously; If ON-DONE is non-nil, it is called with
+the log buffer after the log has been generated."
   (interactive)
   (with-consult-jj-buffer "*jj-log*"
     (consult-jj--start-process
      '("log")
-     :on-done #'consult-jj--log-finalize)))
+     :on-done (lambda ()
+                (consult-jj--log-finalize)
+                (when on-done
+                  (funcall on-done (current-buffer)))))))
 
 (defun consult-jj--log-finalize ()
-  "Prepare the *jj-log* buffer for display.
-Make it read-only, scroll to the top, and fit any side window to its contents."
-  (goto-char (point-min))
-  (read-only-mode 1)
-  (dolist (win (get-buffer-window-list (current-buffer) t t))
-    (set-window-point win (point-min))
-    (set-window-start win (point-min))
-    (when (window-parameter win 'window-side)
-      (fit-window-to-buffer win))))
+  "Prepare the *jj-log* buffer for display."
+  (let ((inhibit-read-only t))
+    (goto-char (point-min)))
+  (read-only-mode 1))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
