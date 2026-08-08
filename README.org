@@ -1,30 +1,28 @@
 #+TITLE: Consult JJ
 
-* Consult JJ
-
 JJ integration for Emacs.
 
 * Functions
 
-| Functions                | Description                                                                  |
-|--------------------------+------------------------------------------------------------------------------|
-| ~consult-jj-root~        | Get the root directory or an error if not in a JJ repository.                |
-| ~consult-jj-diff~        | Show the diff of a revision in a ~*jj-diff*~ buffer; with a prefix argument, |
-|                          | behave as ~consult-jj-diff-from~ instead of ~consult-jj-diff-at~.            |
-| ~consult-jj-diff-at~     | Show the diff of a revision in a ~*jj-diff*~ buffer; prompts for a revision. |
-| ~consult-jj-diff-from~   | Show the diff of the working copy from a revision in a ~*jj-diff*~ buffer;   |
-|                          | prompts for a revision.                                                      |
-| ~with-consult-jj-buffer~ | Macro: prepare a buffer bound to the jj repository root and execute BODY in  |
-|                          | it.                                                                          |
+| Functions              | Description                                                                                                    |
+|------------------------+----------------------------------------------------------------------------------------------------------------|
+| ~consult-jj-root~      | Get the root directory or signal an error if not in a JJ repository.                                           |
+| ~consult-jj-diff~      | Show the diff of a revision in a ~*jj-diff*~ buffer; with a prefix argument, behave as ~consult-jj-diff-from~. |
+| ~consult-jj-diff-at~   | Show the diff of a revision in a ~*jj-diff*~ buffer; prompts for a revision.                                   |
+| ~consult-jj-diff-from~ | Show the diff of the working copy from a revision in a ~*jj-diff*~ buffer;  prompts for a revision.            |
 
 * Configuration
 
-| Variable                  | Default | Description                        |
-|---------------------------+---------+------------------------------------|
-| ~consult-jj-executable~   | ~"jj"~  | Path to the jj executable.         |
+| Variable                 | Default | Description                                                                |
+|--------------------------+---------+----------------------------------------------------------------------------|
+| ~consult-jj-executable~  | ~"jj"~  | Path to the jj executable.                                                 |
+| ~consult-jj-log-preview~ | ~t~     | If non-nil, display a ~jj log~ side window while prompting for a revision. |
 
 Example:
 
 #+begin_src emacs-lisp
 (setq consult-jj-executable "/path/to/jj")
+
+;; Disable the log preview shown during revision prompts.
+(setq consult-jj-log-preview nil)
 #+end_src
