@@ -33,6 +33,11 @@
   "Face for change ids in the jj log."
   :group 'consult-jj)
 
+(defface consult-jj-selected
+  '((t :inherit highlight))
+  "Face for the currently selected revision in the jj log."
+  :group 'consult-jj)
+
 (put 'jj-error 'error-conditions '(jj-error error))
 (put 'jj-error 'error-message "JJ error")
 
@@ -109,6 +114,8 @@ ON-DONE is called in the process buffer when the process exits."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defvar vertico-sort-function)
 
+(declare-function vertico--candidate "vertico")
+
 (defun consult-jj--read-revision (prompt-prefix default-revision)
   "Read a revision from the user.
 
@@ -121,12 +128,25 @@ DEFAULT-REVISION is offered as the default."
                            (window-height     . fit-window-to-buffer)
                            (window-parameters . ((mode-line-format . none))))))
          (candidates    (consult-jj--log-candidates jj-log-buffer))
+         ;; The candidates are already sorted by `jj log' output.
          (vertico-sort-function nil))
+    (consult-jj--read-revision-highlight-candidate (caar candidates)
+                                                   candidates)
     (unwind-protect
-        (let ((rev (completing-read (format "%s revision (default %s): "
-                                            prompt-prefix
-                                            default-revision)
-                                    candidates)))
+        (let ((rev (minibuffer-with-setup-hook
+                       (lambda ()
+                         (add-hook 'post-command-hook
+                                   (lambda ()
+                                     (when (fboundp 'vertico--candidate)
+                                       (consult-jj--read-revision-highlight-candidate
+                                        (vertico--candidate)
+                                        candidates)))
+                                   nil t))
+                     (completing-read (format "%s revision (default %s): "
+                                              prompt-prefix
+                                              default-revision)
+                                      candidates
+                                      nil nil ""))))
           (cond
            ;; Empty -> Default
            ((string-empty-p rev) default-revision)
@@ -140,6 +160,18 @@ DEFAULT-REVISION is offered as the default."
         (delete-window jj-log-window))
       (when (buffer-live-p jj-log-buffer)
         (kill-buffer jj-log-buffer)))))
+
+(defun consult-jj--read-revision-highlight-candidate (candidate candidates)
+  "Highlight the log entry for the selected CANDIDATE.
+
+CANDIDATES is the alist of candidate text to overlay.  When CANDIDATE
+is not in CANDIDATES, the highlight is left unchanged."
+  (when-let* ((overlay   (cdr (assoc candidate candidates))))
+    (dolist (entry candidates)
+      (overlay-put (cdr entry) 'face
+                   (when (eq (cdr entry) overlay)
+                     'consult-jj-selected)))))
+
 
 (defconst consult-jj--revision-fields
   '((:change-id          . "json(change_id)")
@@ -212,9 +244,9 @@ change id (trimmed to 8 characters), description, and bookmarks."
                                                " "))))
                        (cons text overlay)))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Diff
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;###autoload
 (defun consult-jj-diff (arg)
   "Show the diff of revision REV in a \"*jj-diff*\" buffer.

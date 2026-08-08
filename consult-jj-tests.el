@@ -204,7 +204,94 @@ Waits for all processes in buffer to terminate before getting the string."
        (should (eq (get-text-property bookmark-pos 'face (car commit))
                    'consult-jj-bookmark))))))
 
+(ert-deftest consult-jj--read-revision-highlight-candidate ()
+  ;; when the candidate matches a log entry,
+  ;; then that entry's overlay is given the consult-jj-selected face and
+  ;; the other entries' overlays are cleared
+  (with-temp-buffer
+    (let* ((overlay-a   (make-overlay 1 1))
+           (overlay-b   (make-overlay 1 1))
+           (candidates  (list (cons "aaa111 first" overlay-a)
+                              (cons "bbb222 second" overlay-b))))
+      (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
+      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected))
+      (should-not (overlay-get overlay-b 'face))))
 
+  ;; when the selection moves to a different candidate,
+  ;; then the previously highlighted entry loses its face and the newly
+  ;; selected entry is highlighted
+  (with-temp-buffer
+    (let* ((overlay-a   (make-overlay 1 1))
+           (overlay-b   (make-overlay 1 1))
+           (candidates  (list (cons "aaa111 first" overlay-a)
+                              (cons "bbb222 second" overlay-b))))
+      (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
+      (consult-jj--read-revision-highlight-candidate "bbb222 second" candidates)
+      (should-not (overlay-get overlay-a 'face))
+      (should (eq (overlay-get overlay-b 'face) 'consult-jj-selected))))
+
+  ;; when the candidate is nil,
+  ;; then no overlay receives a face
+  (with-temp-buffer
+    (let* ((overlay-a   (make-overlay 1 1))
+           (overlay-b   (make-overlay 1 1))
+           (candidates  (list (cons "aaa111 first" overlay-a)
+                              (cons "bbb222 second" overlay-b))))
+      (consult-jj--read-revision-highlight-candidate nil candidates)
+      (should-not (overlay-get overlay-a 'face))
+      (should-not (overlay-get overlay-b 'face))))
+
+  ;; when the selected text is not in the candidates alist,
+  ;; then the highlight is left unchanged
+  ;;
+  ;; This is unreachable through vertico: it returns nil when the input
+  ;; matches no candidate.  It exercises the function's defensive contract
+  ;; directly.
+  (with-temp-buffer
+    (let* ((overlay-a   (make-overlay 1 1))
+           (overlay-b   (make-overlay 1 1))
+           (candidates  (list (cons "aaa111 first" overlay-a)
+                              (cons "bbb222 second" overlay-b))))
+      (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
+      (consult-jj--read-revision-highlight-candidate "zzz custom text" candidates)
+      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected))
+      (should-not (overlay-get overlay-b 'face))))
+
+  ;; when there are no candidates,
+  ;; then the highlight is a no-op
+  (with-temp-buffer
+    (consult-jj--read-revision-highlight-candidate nil nil)
+    (should-not (overlays-in (point-min) (point-max)))))
+
+(ert-deftest consult-jj--read-revision ()
+  ;; when the user enters empty input, then the default revision is returned
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (cl-letf (((default-value 'completing-read-function)
+              (lambda (&rest _) "")))
+     (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+                           "@-"))))
+
+  ;; when the user selects a candidate, then the change id is returned
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (let* ((log-buffer   (consult-jj--log))
+          (candidate    (car (consult-jj--log-candidates log-buffer)))
+          (expected     (consult-jj--revision-change-id
+                         (overlay-get (cdr candidate) 'consult-jj--revision))))
+     (kill-buffer log-buffer)
+     (cl-letf (((default-value 'completing-read-function)
+                (lambda (&rest _) (car candidate))))
+       (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+                             expected)))))
+  ;; when the user enters custom text that matches no candidate,
+  ;; then the text is passed through unchanged
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj commit -m first-commit")
+   (cl-letf (((default-value 'completing-read-function)
+              (lambda (&rest _) "custom revset")))
+     (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+                           "custom revset")))))
 
 (ert-deftest consult-jj-diff-at ()
   ;; when the revision adds two files, then consult-jj-diff-at shows both diffs
