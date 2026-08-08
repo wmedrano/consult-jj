@@ -23,6 +23,16 @@
   :type 'string
   :group 'consult-jj)
 
+(defface consult-jj-bookmark
+  '((t :inherit font-lock-type-face))
+  "Face for bookmarks in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-change-id
+  '((t :inherit font-lock-constant-face))
+  "Face for change ids in the jj log."
+  :group 'consult-jj)
+
 (put 'jj-error 'error-conditions '(jj-error error))
 (put 'jj-error 'error-message "JJ error")
 
@@ -97,6 +107,8 @@ ON-DONE is called in the process buffer when the process exits."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Revisions / Log
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defvar vertico-sort-function)
+
 (defun consult-jj--read-revision (prompt-prefix default-revision)
   "Read a revision from the user.
 
@@ -107,16 +119,23 @@ DEFAULT-REVISION is offered as the default."
                          jj-log-buffer
                          '((side              . bottom)
                            (window-height     . fit-window-to-buffer)
-                           (window-parameters . ((mode-line-format . none)))))))
+                           (window-parameters . ((mode-line-format . none))))))
+         (candidates    (consult-jj--log-candidates jj-log-buffer))
+         (vertico-sort-function nil))
     (unwind-protect
         (let ((rev (completing-read (format "%s revision (default %s): "
                                             prompt-prefix
                                             default-revision)
-                                    nil
-                                    nil nil)))
-          (if (string-empty-p rev)
-              default-revision
-            rev))
+                                    candidates)))
+          (cond
+           ;; Empty -> Default
+           ((string-empty-p rev) default-revision)
+           ;; Revision -> Change ID
+           ((assoc rev candidates)
+            (consult-jj--revision-change-id
+             (overlay-get (cdr (assoc rev candidates)) 'consult-jj--revision)))
+           ;; Custom text
+           (t rev)))
       (when (window-live-p jj-log-window)
         (delete-window jj-log-window))
       (when (buffer-live-p jj-log-buffer)
@@ -124,7 +143,7 @@ DEFAULT-REVISION is offered as the default."
 
 (defconst consult-jj--revision-fields
   '((:change-id          . "json(change_id)")
-    (:change-id-shortest . "json(change_id.shortest())")
+    (:change-id-shortest . "json(change_id.shortest().prefix())")
     (:commit-id          . "json(commit_id)")
     (:description        . "json(description.first_line())")
     (:bookmarks          . "json(bookmarks.map(|b| b.name()))"))
@@ -170,7 +189,29 @@ The log is generated synchronously.  Returns the log buffer."
                      revision))))
   (read-only-mode t))
 
-
+(defun consult-jj--log-candidates (buffer)
+  "Return an alist of candidate text to overlay for BUFFER.
+
+Each element is a cons cell `(TEXT . OVERLAY)'.  TEXT is the revision's
+change id (trimmed to 8 characters), description, and bookmarks."
+  (with-current-buffer buffer
+    (cl-loop for overlay in (overlays-in (point-min) (point-max))
+             for revision = (overlay-get overlay 'consult-jj--revision)
+             when revision
+             collect (let* ((change-id       (propertize (substring (consult-jj--revision-change-id revision) 0 8)
+                                                         'face 'consult-jj-change-id))
+                            (raw-description (consult-jj--revision-description revision))
+                            (description     (if (string-empty-p raw-description)
+                                                 (propertize "(no description set)" 'face 'font-lock-comment-face)
+                                               raw-description))
+                            (bookmarks       (propertize (string-join (consult-jj--revision-bookmarks revision) " ")
+                                                         'face 'consult-jj-bookmark))
+                            (text            (string-trim
+                                              (string-join
+                                               (list change-id description bookmarks)
+                                               " "))))
+                       (cons text overlay)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Diff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

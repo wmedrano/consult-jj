@@ -77,8 +77,8 @@ Waits for all processes in buffer to terminate before getting the string."
   (with-test-jj-repo
    (consult-jj-test-sh
     "jj bookmark set mybookmark"
-    (list "jj" "commit" "-m" "initial-commit")
-    (list "jj" "commit" "-m" "second-commit")
+    "jj commit -m initial-commit"
+    "jj commit -m second-commit"
     "jj new mybookmark")
    (let* ((buffer (consult-jj--log))
           (result (consult-jj-test-buffer-string buffer)))
@@ -150,6 +150,61 @@ Waits for all processes in buffer to terminate before getting the string."
                  revisions
                  (list (consult-jj-test-fields-to-revision rev1-fields)
                        (consult-jj-test-fields-to-revision rev2-fields))))))))
+
+(ert-deftest consult-jj--log-candidates-no-description ()
+  ;; when a revision has no description, then the candidate shows
+  ;; "(no description set)" styled with font-lock-comment-face
+  (with-temp-buffer
+    (insert
+     "@  " (consult-jj-test-revision-json
+            '((:change-id          . "abc12345")
+              (:change-id-shortest . "abc")
+              (:commit-id          . "aaa111")
+              (:description        . "")
+              (:bookmarks          . [])))
+     "abc123 author 2024-01-01 00:00:00\n"
+     "│\n")
+    (consult-jj--log-finalize)
+    (let* ((candidates (consult-jj--log-candidates (current-buffer)))
+           (candidate (car candidates)))
+      (should (= (length candidates) 1))
+      (let ((pos (string-search "(no description set)" (car candidate))))
+        (should pos)
+        (should (eq (get-text-property pos 'face (car candidate))
+                    'font-lock-comment-face))))))
+
+
+
+(ert-deftest consult-jj--log-candidates ()
+  ;; when the log contains revision overlays, then candidates maps display
+  ;; text to the corresponding overlays
+  (with-test-jj-repo
+   (consult-jj-test-write-file "file.txt" "contents")
+   (consult-jj-test-sh
+    "jj bookmark set mybookmark"
+    "jj commit -m first-commit")
+   (let* ((buffer (consult-jj--log))
+          (candidates (consult-jj--log-candidates buffer))
+          (commit (nth 1 candidates)))
+     (should (= (length candidates) 3)) ;; Contains root, commit, working-copy
+     ;; the second candidate maps text to an overlay carrying revision metadata
+     (should (overlayp (cdr commit)))
+     (should (consult-jj--revision-p
+              (overlay-get (cdr commit) 'consult-jj--revision)))
+     ;; the text is the change id (8 chars), description, and bookmarks
+     (should (string-match-p
+              (rx bol (repeat 8 (any alnum)) (0+ " " (1+ (not (any "\n")))) eol)
+              (car commit)))
+     ;; the change id is styled with consult-jj-change-id
+     (should (eq (get-text-property 0 'face (car commit))
+                 'consult-jj-change-id))
+     ;; the bookmarks are styled with consult-jj-bookmark
+     (let ((bookmark-pos (string-search "mybookmark" (car commit))))
+       (should bookmark-pos)
+       (should (eq (get-text-property bookmark-pos 'face (car commit))
+                   'consult-jj-bookmark))))))
+
+
 
 (ert-deftest consult-jj-diff-at ()
   ;; when the revision adds two files, then consult-jj-diff-at shows both diffs
