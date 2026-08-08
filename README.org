@@ -6,12 +6,25 @@ JJ integration for Emacs.
 
 * Functions
 
-| Functions         | Description                                                   |
-|-------------------+---------------------------------------------------------------|
-| ~consult-jj-root~ | Get the root directory or an error if not in a JJ repository. |
+| Functions                | Description                                                                  |
+|--------------------------+------------------------------------------------------------------------------|
+| ~consult-jj-root~        | Get the root directory or an error if not in a JJ repository.                |
+| ~consult-jj-diff~        | Show the diff of a revision in a ~*jj-diff*~ buffer; with a prefix argument, |
+|                          | behave as ~consult-jj-diff-from~ instead of ~consult-jj-diff-at~.            |
+| ~consult-jj-diff-at~     | Show the diff of a revision in a ~*jj-diff*~ buffer; prompts for a revision. |
+| ~consult-jj-diff-from~   | Show the diff of the working copy from a revision in a ~*jj-diff*~ buffer;   |
+|                          | prompts for a revision.                                                      |
+| ~with-consult-jj-buffer~ | Macro: prepare a buffer bound to the jj repository root and execute BODY in  |
+|                          | it.                                                                          |
 
+* Configuration
 
-# consult-jj
-JJ integration for Emacs
+| Variable                  | Default | Description                        |
+|---------------------------+---------+------------------------------------|
+| ~consult-jj-executable~   | ~"jj"~  | Path to the jj executable.         |
 
-## Functions
+Example:
+
+#+begin_src emacs-lisp
+(setq consult-jj-executable "/path/to/jj")
+#+end_src
