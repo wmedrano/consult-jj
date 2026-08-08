@@ -23,11 +23,6 @@
   :type 'string
   :group 'consult-jj)
 
-(defcustom consult-jj-log-preview t
-  "If querying for a revision should show a `jj log' preview buffer."
-  :type 'boolean
-  :group 'consult-jj)
-
 (put 'jj-error 'error-conditions '(jj-error error))
 (put 'jj-error 'error-message "JJ error")
 
@@ -103,19 +98,27 @@ DEFAULT-REVISION is offered as the default."
                                    '((side              . bottom)
                                      (window-height     . fit-window-to-buffer)
                                      (window-parameters . ((mode-line-format . none))))))))))
-    (if consult-jj-log-preview
-        (consult-jj--log :on-done show-log))
-    (unwind-protect
-        (let* ((candidates nil)
-               (rev        (thread-first  "%s revision (default %s): "
-                                          (format prompt-prefix default-revision)
-                                          (completing-read candidates nil nil)
-                                          string-trim)))
-          (if (string-empty-p rev)
-              default-revision rev))
-      (setq active nil)
-      (when (and jj-log-window (window-live-p jj-log-window))
-        (delete-window jj-log-window)))))
+    (consult-jj--log :on-done show-log)
+  (unwind-protect
+      (let ((rev (completing-read (format "%s revision (default %s): "
+                                          prompt-prefix
+                                          default-revision)
+                                  nil
+                                  nil nil)))
+        (if (string-empty-p rev)
+            default-revision
+          rev))
+    (setq active nil)
+    (when (and jj-log-window (window-live-p jj-log-window))
+      (delete-window jj-log-window)))))
+
+(defconst consult-jj--revision-fields
+  '((:change-id          . "json(change_id)")
+    (:change-id-shortest . "json(change_id.shortest())")
+    (:commit-id          . "json(commit_id)")
+    (:description        . "json(description.first_line())")
+    (:bookmarks          . "json(bookmarks.map(|b| b.name()))"))
+  "Alist mapping revision field keywords to jj template expressions.")
 
 (cl-defun consult-jj--log (&key on-done)
   "Show the `jj log' output in a \"*jj-log*\" buffer.
@@ -125,15 +128,37 @@ the log buffer after the log has been generated."
   (interactive)
   (with-consult-jj-buffer "*jj-log*"
     (consult-jj--start-process
-     '("log")
+     (list "log" "-T"
+           (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
+                        "++"))
      :on-done (lambda ()
                 (consult-jj--log-finalize)
                 (when on-done
                   (funcall on-done (current-buffer)))))))
 
+(cl-defstruct (consult-jj--revision (:constructor consult-jj--make-revision))
+  change-id
+  change-id-shortest
+  commit-id
+  description
+  bookmarks)
+
 (defun consult-jj--log-finalize ()
   "Prepare the *jj-log* buffer for display."
   (let ((inhibit-read-only t))
+    (goto-char (point-min))
+    (while (search-forward "\"" nil t)
+      (backward-char)
+      (let* ((revision-start     (line-beginning-position))
+             (json-start         (point))
+             (revision-args      (cl-loop for (field . _template) in consult-jj--revision-fields
+                                          append (list field (json-parse-buffer))))
+             (revision           (apply #'consult-jj--make-revision revision-args)))
+        (delete-region json-start (point))
+        (forward-line 2)
+        (overlay-put (make-overlay revision-start (point))
+                     'consult-jj--revision
+                     revision)))
     (goto-char (point-min)))
   (read-only-mode 1))
 

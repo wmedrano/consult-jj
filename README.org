@@ -16,13 +16,9 @@ JJ integration for Emacs.
 | Variable                 | Default | Description                                                                |
 |--------------------------+---------+----------------------------------------------------------------------------|
 | ~consult-jj-executable~  | ~"jj"~  | Path to the jj executable.                                                 |
-| ~consult-jj-log-preview~ | ~t~     | If non-nil, display a ~jj log~ side window while prompting for a revision. |
 
 Example:
 
 #+begin_src emacs-lisp
 (setq consult-jj-executable "/path/to/jj")
-
-;; Disable the log preview shown during revision prompts.
-(setq consult-jj-log-preview nil)
 #+end_src
