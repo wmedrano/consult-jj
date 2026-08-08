@@ -34,5 +34,12 @@ jobs:
           jj --version
           emacs --version
 
+      - name: Configure jj identity
+        # Have user name and email set in CI. Required for some unit test
+        # regexes.
+        run: |
+          jj config set --user user.name "CI"
+          jj config set --user user.email ci@example.com
+
       - name: Lint and test
         run: ./test.sh
