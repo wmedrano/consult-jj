@@ -134,6 +134,7 @@ Make it read-only, scroll to the top, and fit any side window to its contents."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Diff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;###autoload
 (defun consult-jj-diff (arg)
   "Show the diff of revision REV in a \"*jj-diff*\" buffer.
 
@@ -146,6 +147,7 @@ The diff is generated asynchronously and displayed with
       (funcall-interactively #'consult-jj-diff-from)
     (funcall-interactively #'consult-jj-diff-at)))
 
+;;;###autoload
 (defun consult-jj-diff-at (&optional rev)
   "Show the diff of revision REV in a \"*jj-diff*\" buffer.
 
@@ -163,6 +165,7 @@ diff is generated asynchronously and displayed with `diff-mode'."
   (consult-jj--start-process `("diff" "--git" "-r" ,rev)
                              :on-done #'consult-jj-diff--finalize))
 
+;;;###autoload
 (defun consult-jj-diff-from (&optional from-rev)
   "Show the diff of the working copy from FROM-REV in a \"*jj-diff*\" buffer.
 
