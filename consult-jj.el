@@ -44,7 +44,7 @@ Returns an error if the `default-directory' is not in a jj repository."
           result
         (signal 'jj-error result)))))
 
-(defmacro with-consult-jj-buffer (name &rest body)
+(defmacro consult-jj--with-reused-buffer (name &rest body)
   "Prepare the buffer NAME and execute BODY in it.
 
 The buffer is created if needed.  Otherwise, the buffer is reused, erased, and
@@ -58,6 +58,20 @@ Returns the buffer."
        (setq-local default-directory root)
        (erase-buffer)
        (delete-all-overlays)
+       ,@body
+       buffer)))
+
+(defmacro consult-jj--with-new-buffer (name &rest body)
+  "Create a new buffer named NAME and execute BODY in it.
+
+The buffer is created with `generate-new-buffer', so a unique name is used
+if NAME is already taken.  Its `default-directory' is set to the root of the
+current jj repository.  Returns the buffer."
+  (declare (indent 1))
+  `(let ((default-directory              (consult-jj-root))
+         (inhibit-read-only t)
+         (buffer            (generate-new-buffer ,name)))
+     (with-current-buffer buffer
        ,@body
        buffer)))
 
@@ -88,29 +102,25 @@ ON-DONE is called in the process buffer when the process exits."
 
 PROMPT-PREFIX is prepended to the prompt.
 DEFAULT-REVISION is offered as the default."
-  (let* ((active        t)
-         (jj-log-window nil)
-         (show-log      (lambda (buffer)
-                          (when active
-                            (setq jj-log-window
-                                  (display-buffer-in-side-window
-                                   buffer
-                                   '((side              . bottom)
-                                     (window-height     . fit-window-to-buffer)
-                                     (window-parameters . ((mode-line-format . none))))))))))
-    (consult-jj--log :on-done show-log)
-  (unwind-protect
-      (let ((rev (completing-read (format "%s revision (default %s): "
-                                          prompt-prefix
-                                          default-revision)
-                                  nil
-                                  nil nil)))
-        (if (string-empty-p rev)
-            default-revision
-          rev))
-    (setq active nil)
-    (when (and jj-log-window (window-live-p jj-log-window))
-      (delete-window jj-log-window)))))
+  (let* ((jj-log-buffer (consult-jj--log))
+         (jj-log-window (display-buffer-in-side-window
+                         jj-log-buffer
+                         '((side              . bottom)
+                           (window-height     . fit-window-to-buffer)
+                           (window-parameters . ((mode-line-format . none)))))))
+    (unwind-protect
+        (let ((rev (completing-read (format "%s revision (default %s): "
+                                            prompt-prefix
+                                            default-revision)
+                                    nil
+                                    nil nil)))
+          (if (string-empty-p rev)
+              default-revision
+            rev))
+      (when (window-live-p jj-log-window)
+        (delete-window jj-log-window))
+      (when (buffer-live-p jj-log-buffer)
+        (kill-buffer jj-log-buffer)))))
 
 (defconst consult-jj--revision-fields
   '((:change-id          . "json(change_id)")
@@ -120,22 +130,6 @@ DEFAULT-REVISION is offered as the default."
     (:bookmarks          . "json(bookmarks.map(|b| b.name()))"))
   "Alist mapping revision field keywords to jj template expressions.")
 
-(cl-defun consult-jj--log (&key on-done)
-  "Show the `jj log' output in a \"*jj-log*\" buffer.
-
-The log is generated asynchronously; If ON-DONE is non-nil, it is called with
-the log buffer after the log has been generated."
-  (interactive)
-  (with-consult-jj-buffer "*jj-log*"
-    (consult-jj--start-process
-     (list "log" "-T"
-           (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
-                        "++"))
-     :on-done (lambda ()
-                (consult-jj--log-finalize)
-                (when on-done
-                  (funcall on-done (current-buffer)))))))
-
 (cl-defstruct (consult-jj--revision (:constructor consult-jj--make-revision))
   change-id
   change-id-shortest
@@ -143,24 +137,38 @@ the log buffer after the log has been generated."
   description
   bookmarks)
 
+(defun consult-jj--log ()
+  "Show the `jj log' output in a \"*jj-log*\" buffer.
+
+The log is generated synchronously.  Returns the log buffer."
+  (interactive)
+  (consult-jj--with-new-buffer "*jj-log*"
+    (let ((status (call-process consult-jj-executable nil t nil
+                                "--color" "never" "--no-pager"
+                                "log" "-T"
+                                (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
+                                             "++"))))
+      (unless (zerop status)
+        (signal 'jj-error (buffer-string)))
+      (consult-jj--log-finalize))))
+
 (defun consult-jj--log-finalize ()
-  "Prepare the *jj-log* buffer for display."
-  (let ((inhibit-read-only t))
-    (goto-char (point-min))
+  "Prepare the jj log buffer for display."
+  (goto-char (point-min))
+  (save-excursion
     (while (search-forward "\"" nil t)
       (backward-char)
-      (let* ((revision-start     (line-beginning-position))
-             (json-start         (point))
-             (revision-args      (cl-loop for (field . _template) in consult-jj--revision-fields
-                                          append (list field (json-parse-buffer))))
-             (revision           (apply #'consult-jj--make-revision revision-args)))
+      (let* ((start         (line-beginning-position))
+             (json-start    (point))
+             (revision-args (cl-loop for (field . _template) in consult-jj--revision-fields
+                                     append (list field (json-parse-buffer))))
+             (revision      (apply #'consult-jj--make-revision revision-args)))
         (delete-region json-start (point))
         (forward-line 2)
-        (overlay-put (make-overlay revision-start (point))
+        (overlay-put (make-overlay start (point))
                      'consult-jj--revision
-                     revision)))
-    (goto-char (point-min)))
-  (read-only-mode 1))
+                     revision))))
+  (read-only-mode t))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -187,7 +195,7 @@ If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
 diff is generated asynchronously and displayed with `diff-mode'."
   (interactive)
   (let* ((rev    (or rev (consult-jj--read-revision "jj diff at" "@")))
-         (buffer (with-consult-jj-buffer "*jj-diff*"
+         (buffer (consult-jj--with-reused-buffer "*jj-diff*"
                    (consult-jj-diff-at--start rev))))
     (pop-to-buffer buffer)
     buffer))
@@ -206,7 +214,7 @@ defaulting to \"@-\".  The diff is generated asynchronously and
 displayed with `diff-mode'."
   (interactive)
   (let* ((from-rev (or from-rev (consult-jj--read-revision "jj diff from" "@-")))
-         (buffer   (with-consult-jj-buffer "*jj-diff*"
+         (buffer   (consult-jj--with-reused-buffer "*jj-diff*"
                      (consult-jj-diff-from--start from-rev))))
     (pop-to-buffer buffer)
     buffer))
