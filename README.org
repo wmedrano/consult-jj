@@ -1,0 +1,17 @@
+#+TITLE: Consult JJ
+
+* Consult JJ
+
+JJ integration for Emacs.
+
+* Functions
+
+| Functions         | Description                                                   |
+|-------------------+---------------------------------------------------------------|
+| ~consult-jj-root~ | Get the root directory or an error if not in a JJ repository. |
+
+
+# consult-jj
+JJ integration for Emacs
+
+## Functions

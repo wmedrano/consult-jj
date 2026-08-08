@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-26.04 # latest LTS; apt has Emacs 30.2. Note: preview image per actions/runner-images
+    steps:
+      # Pinned to full commit SHA of actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+
+      - name: Install jj
+        run: |
+          set -euo pipefail
+          release_url=$(curl -sL https://api.github.com/repos/jj-vcs/jj/releases/latest \
+            | grep -o '"browser_download_url": *"[^"]*x86_64-unknown-linux-musl\.tar\.gz"' \
+            | cut -d '"' -f 4)
+          curl -sL "$release_url" -o /tmp/jj.tar.gz
+          mkdir -p /tmp/jj-extract
+          tar -xzf /tmp/jj.tar.gz -C /tmp/jj-extract
+          mkdir -p "$HOME/.local/bin"
+          mv /tmp/jj-extract/jj "$HOME/.local/bin/jj"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Check installation
+        run: |
+          jj --version
+          emacs --version
+
+      - name: Run tests
+        run: |
+          emacs --batch -L . -l consult-jj -l consult-jj-tests \
+            -f ert-run-tests-batch-and-exit
