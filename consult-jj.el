@@ -1,9 +1,23 @@
-;; -*- lexical-binding: t -*-
+;;; consult-jj.el --- JJ integration for consult  -*- lexical-binding: t -*-
 
 ;; Package-Requires: (emacs "30")
 
+;; Author: Will Medrano <wmedrano@wmedrano.dev>
+
+;;; Commentary:
+;;
+;; This package provides `consult' integration for `jj'.
+
+;;; Code:
+
+(defgroup consult-jj nil
+  "JJ integration for consult."
+  :group 'tools)
+
 (defcustom consult-jj-executable "jj"
-  "Path to the jj executable.")
+  "Path to the jj executable."
+  :type 'string
+  :group 'consult-jj)
 
 (put 'jj-error 'error-conditions '(jj-error error))
 (put 'jj-error 'error-message "JJ error")
@@ -29,7 +43,7 @@ Returns an error if the `default-directory' is not in a jj repository."
 (defmacro with-consult-jj-buffer (name &rest body)
   "Prepare the buffer NAME and execute BODY in it.
 
-The buffer is created if needed. Otherwise, the buffer is reused, erased, and
+The buffer is created if needed.  Otherwise, the buffer is reused, erased, and
 its `default-directory' is set to the root of the current jj repository.
 Returns the buffer."
   `(let ((root              (consult-jj-root))
@@ -43,6 +57,10 @@ Returns the buffer."
        buffer)))
 
 (defun consult-jj--read-revision (prompt-prefix default-revision)
+  "Read a revision from the user.
+
+PROMPT-PREFIX is prepended to the prompt.
+DEFAULT-REVISION is offered as the default."
   (completing-read (format "%s revision (default %s):" prompt-prefix default-revision)
                    (list default-revision)
                    nil nil))
@@ -54,7 +72,7 @@ Returns the buffer."
 (defun consult-jj-diff (arg)
   "Show the diff of revision REV in a \"*jj-diff*\" buffer.
 
-When called interactively with a prefix argument, behave as
+When called interactively with a prefix ARG, behave as
 `consult-jj-diff-from'; otherwise, behave as `consult-jj-diff-at'.
 The diff is generated asynchronously and displayed with
 `diff-mode'."
@@ -70,14 +88,15 @@ The diff is generated asynchronously and displayed with
 If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
 diff is generated asynchronously and displayed with `diff-mode'."
   (interactive)
-  (let* ((rev    (or rev (consult-jj--read-revision "jj diff at" "@"))
+  (let* ((rev    (or rev (consult-jj--read-revision "jj diff at" "@")))
          (buffer (with-consult-jj-buffer "*jj-diff*"
                                          (consult-jj-diff-at--start rev))))
     (pop-to-buffer buffer)
     buffer))
 
 (defun consult-jj-diff-at--start (rev)
-  (let* ((sentinel (lambda (proc event)
+  "Start generating the diff at revision REV."
+  (let* ((sentinel (lambda (proc _event)
                      (with-current-buffer (process-buffer proc)
                        (consult-jj-diff--finalize))))
          (proc     (start-process "jj-diff"
@@ -104,7 +123,8 @@ displayed with `diff-mode'."
     buffer))
 
 (defun consult-jj-diff-from--start (from-rev)
-  (let* ((sentinel (lambda (proc event)
+  "Start generating the diff from FROM-REV."
+  (let* ((sentinel (lambda (proc _event)
                      (with-current-buffer (process-buffer proc)
                        (consult-jj-diff--finalize))))
          (proc     (start-process "jj-diff"
@@ -118,8 +138,10 @@ displayed with `diff-mode'."
     (set-process-sentinel proc sentinel)))
 
 (defun consult-jj-diff--finalize ()
+  "Finalize the diff buffer by enabling `diff-mode' and `read-only-mode'."
   (goto-char (point-min))
   (diff-mode)
   (read-only-mode t))
 
 (provide 'consult-jj)
+;;; consult-jj.el ends here
