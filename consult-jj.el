@@ -307,6 +307,8 @@ change id (trimmed to 8 characters), description, and bookmarks."
 ;; New/Edit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defvar consult-jj--display-function #'display-message-or-buffer)
+
 (defun consult-jj--run-command (args)
   "Run `jj' with ARGS and display its output.
 
@@ -316,7 +318,7 @@ Runs synchronously and signals a `jj-error' on failure."
                          (append '("--color" "never" "--no-pager") args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
-      (display-message-or-buffer (string-trim (buffer-string))))))
+      (funcall consult-jj--display-function (string-trim (buffer-string))))))
 
 ;;;###autoload
 (defun consult-jj-new (&optional rev)
@@ -327,6 +329,7 @@ Runs `jj new' synchronously and displays its output."
   (interactive)
   (let ((rev (or rev (consult-jj-read-revision "jj new" "@"))))
     (consult-jj--run-command `("new" ,rev))))
+
 
 ;;;###autoload
 (defun consult-jj-edit (&optional rev)
