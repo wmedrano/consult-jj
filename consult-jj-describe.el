@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'consult-jj)
+(require 'consult-jj-diff)
 (require 'markdown-mode)
 
 (defvar-local consult-jj-describe-revision nil
@@ -30,6 +31,7 @@ discards the edit and kills the buffer."
 
 (define-key consult-jj-describe-mode-map (kbd "C-c C-c") #'consult-jj-describe-accept)
 (define-key consult-jj-describe-mode-map (kbd "C-c C-k") #'consult-jj-describe-reject)
+(define-key consult-jj-describe-mode-map (kbd "C-c C-d") #'consult-jj-describe-diff)
 
 ;;;###autoload
 (defun consult-jj-describe (&optional rev)
@@ -78,7 +80,8 @@ Enables `consult-jj-describe-mode' and records REV in
                        (string-join
                         '("JJ Describe"
                           "Accept (\\[consult-jj-describe-accept])"
-                          "Reject (\\[consult-jj-describe-reject])")
+                          "Reject (\\[consult-jj-describe-reject])"
+                          "Diff (\\[consult-jj-describe-diff])")
                         " | "))))
 
 (defun consult-jj-describe-accept ()
@@ -113,6 +116,18 @@ Sends the buffer to `jj describe --stdin' for the revision in
   "Kill the buffer without saving the description."
   (interactive)
   (kill-buffer))
+
+(defun consult-jj-describe-diff ()
+  "Show the diff of the change being described in the current buffer.
+
+Displays the diff of `consult-jj-describe-revision' using
+`consult-jj-diff-at', which pops to the \"*jj-diff*\" buffer."
+  (interactive)
+  (unless (derived-mode-p 'consult-jj-describe-mode)
+    (user-error "Not in a `consult-jj-describe-mode' buffer"))
+  (unless consult-jj-describe-revision
+    (user-error "No revision is being described in this buffer"))
+  (consult-jj-diff-at consult-jj-describe-revision))
 
 (provide 'consult-jj-describe)
 ;;; consult-jj-describe.el ends here

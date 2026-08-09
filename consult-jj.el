@@ -65,6 +65,20 @@
 (put 'jj-error 'error-conditions '(jj-error error))
 (put 'jj-error 'error-message "JJ error")
 
+(defun consult-jj--signal (message)
+  "Signal a `jj-error' with the failure MESSAGE from a `jj' command.
+
+When MESSAGE indicates that the current directory is not in a jj
+repository, signal with a clearer message."
+  (let ((trimmed (string-trim (string-remove-prefix "Error: " message))))
+    (signal 'jj-error
+            (list (cond
+                   ((string-empty-p trimmed)
+                    "jj failed.")
+                   ((string-match-p "\\(no jj repo\\|failed to find repository\\)" trimmed)
+                    "There is no jj repository here.  Run jj from a directory inside a jj repository.")
+                   (t trimmed))))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; General
@@ -81,7 +95,7 @@ Returns an error if the `default-directory' is not in a jj repository."
                                                   (point-max)))))
       (if (= status 0)
           result
-        (signal 'jj-error result)))))
+        (consult-jj--signal result)))))
 
 (defmacro consult-jj--with-reused-buffer (name &rest body)
   "Prepare the buffer NAME and execute BODY in it.
@@ -233,7 +247,7 @@ The log is generated synchronously.  Returns the log buffer."
                                 (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
                                              "++"))))
       (unless (zerop status)
-        (signal 'jj-error (buffer-string)))
+        (consult-jj--signal (buffer-string)))
       (consult-jj--log-finalize))))
 
 (defun consult-jj--log-finalize ()
@@ -285,7 +299,7 @@ change id (trimmed to 8 characters), description, and bookmarks."
                                 "log" "--no-graph" "-r" rev
                                 "-T" "json(change_id)")))
       (unless (zerop status)
-        (error "JJ log failed: %s" (buffer-string)))
+        (consult-jj--signal (buffer-string)))
       (goto-char (point-min))
       (json-parse-buffer :object-type 'alist :array-type 'list))))
 
