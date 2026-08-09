@@ -320,6 +320,28 @@ assert on the asynchronously generated buffer contents."
 ;; Diff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(ert-deftest diff-without-prefix-delegates-to-diff-at ()
+  (let ((diff-at-called nil)
+        (diff-from-called nil))
+    (cl-letf (((symbol-function 'consult-jj-diff-at)
+               (lambda (&rest _) (setq diff-at-called t)))
+              ((symbol-function 'consult-jj-diff-from)
+               (lambda (&rest _) (setq diff-from-called t))))
+      (consult-jj-diff nil))
+    (should diff-at-called)
+    (should-not diff-from-called)))
+
+(ert-deftest diff-with-prefix-delegates-to-diff-from ()
+  (let ((diff-at-called nil)
+        (diff-from-called nil))
+    (cl-letf (((symbol-function 'consult-jj-diff-at)
+               (lambda (&rest _) (setq diff-at-called t)))
+              ((symbol-function 'consult-jj-diff-from)
+               (lambda (&rest _) (setq diff-from-called t))))
+      (consult-jj-diff '(4)))
+    (should diff-from-called)
+    (should-not diff-at-called)))
+
 (ert-deftest diff-at-without-rev-prompts-with-prefix-and-default-at ()
   (with-test-repo
     (let ((called-with nil))
