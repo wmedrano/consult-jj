@@ -62,8 +62,7 @@
   "Face for \"(no description set)\" in the jj log."
   :group 'consult-jj)
 
-(put 'jj-error 'error-conditions '(jj-error error))
-(put 'jj-error 'error-message "JJ error")
+(define-error 'jj-error "JJ error")
 
 (defun consult-jj--signal (message)
   "Signal a `jj-error' with the failure MESSAGE from a `jj' command.
@@ -97,23 +96,6 @@ Returns an error if the `default-directory' is not in a jj repository."
           result
         (consult-jj--signal result)))))
 
-(defmacro consult-jj--with-reused-buffer (name &rest body)
-  "Prepare the buffer NAME and execute BODY in it.
-
-The buffer is created if needed.  Otherwise, the buffer is reused, erased, and
-its `default-directory' is set to the root of the current jj repository.
-Returns the buffer."
-  (declare (indent 1))
-  `(let ((root              (consult-jj-root))
-         (buffer            (get-buffer-create ,name)))
-     (with-current-buffer buffer
-       (setq-local default-directory root)
-       (read-only-mode -1)
-       (erase-buffer)
-       (delete-all-overlays)
-       ,@body
-       buffer)))
-
 (defmacro consult-jj--with-new-buffer (name &rest body)
   "Create a new buffer named NAME and execute BODY in it.
 
@@ -121,8 +103,8 @@ The buffer is created with `generate-new-buffer', so a unique name is used
 if NAME is already taken.  Its `default-directory' is set to the root of the
 current jj repository.  Returns the buffer."
   (declare (indent 1))
-  `(let ((default-directory (consult-jj-root))
-         (buffer            (generate-new-buffer ,name)))
+  `(let* ((default-directory (consult-jj-root))
+          (buffer            (generate-new-buffer ,name)))
      (with-current-buffer buffer
        ,@body
        buffer)))
@@ -130,14 +112,16 @@ current jj repository.  Returns the buffer."
 (cl-defun consult-jj--start-process (args &key on-done)
   "Start a `jj' process with ARGS.
 
-COLOR is passed to the `--color' flag; it defaults to \"never\".
+The process is started with `--color never' and `--no-pager'.
 ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
          (final-args (append '("--color" "never" "--no-pager")
                              args))
          (sentinel   (if on-done (lambda (proc _event)
-                                   (with-current-buffer (process-buffer proc)
-                                     (funcall on-done)))))
+                                   (when (and (eq (process-status proc) 'exit)
+                                              (buffer-live-p (process-buffer proc)))
+                                     (with-current-buffer (process-buffer proc)
+                                       (funcall on-done))))))
          (proc (apply #'start-process (format "jj-%s" command)
                       (current-buffer)
                       consult-jj-executable
@@ -277,8 +261,9 @@ change id (trimmed to 8 characters), description, and bookmarks."
     (cl-loop for overlay in (overlays-in (point-min) (point-max))
              for revision = (overlay-get overlay 'consult-jj--revision)
              when revision
-             collect (let* ((change-id       (propertize (substring (consult-jj--revision-change-id revision) 0 8)
-                                                         'face 'consult-jj-change-id-face))
+             collect (let* ((change-id       (let ((id (consult-jj--revision-change-id revision)))
+                                               (propertize (substring id 0 (min 8 (length id)))
+                                                           'face 'consult-jj-change-id-face)))
                             (raw-description (consult-jj--revision-description revision))
                             (description     (if (string-empty-p raw-description)
                                                  (propertize "(no description set)" 'face 'consult-jj-no-description-face)
@@ -307,6 +292,8 @@ change id (trimmed to 8 characters), description, and bookmarks."
 ;; New/Edit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defvar consult-jj--display-function #'display-message-or-buffer)
+
 (defun consult-jj--run-command (args)
   "Run `jj' with ARGS and display its output.
 
@@ -316,7 +303,7 @@ Runs synchronously and signals a `jj-error' on failure."
                          (append '("--color" "never" "--no-pager") args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
-      (display-message-or-buffer (string-trim (buffer-string))))))
+      (funcall consult-jj--display-function (string-trim (buffer-string))))))
 
 ;;;###autoload
 (defun consult-jj-new (&optional rev)
@@ -327,6 +314,7 @@ Runs `jj new' synchronously and displays its output."
   (interactive)
   (let ((rev (or rev (consult-jj-read-revision "jj new" "@"))))
     (consult-jj--run-command `("new" ,rev))))
+
 
 ;;;###autoload
 (defun consult-jj-edit (&optional rev)
