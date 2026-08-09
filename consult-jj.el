@@ -315,7 +315,7 @@ Runs synchronously and signals a `jj-error' on failure."
     (let ((status (apply #'call-process consult-jj-executable nil t nil
                          (append '("--color" "never" "--no-pager") args))))
       (unless (zerop status)
-        (signal 'jj-error (buffer-string)))
+        (consult-jj--signal (buffer-string)))
       (display-message-or-buffer (string-trim (buffer-string))))))
 
 ;;;###autoload

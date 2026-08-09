@@ -85,9 +85,12 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
 
 (ert-deftest consult-jj-root ()
   ;; when not inside a jj repo, then consult-jj-root signals a jj-error
+  ;; with a message explaining that there is no jj repository here
   (let ((default-directory (make-temp-file "root-error" t)))
-    (should-error (consult-jj-root)
-                  :type 'jj-error))
+    (let ((err (should-error (consult-jj-root)
+                             :type 'jj-error)))
+      (should (string-match-p "There is no jj repository here"
+                              (error-message-string err)))))
   ;; when inside a jj repo, then consult-jj-root returns the repo root
   (with-test-jj-repo
    (should (string-equal (consult-jj-root)
@@ -400,12 +403,14 @@ index 0000000000..aa39060d7e
        (should (string-match-p "Working copy"
                                consult-jj-test-message)))))
 
-  ;; when the command fails, then a jj-error is signaled
+  ;; when the command fails, then a jj-error is signaled with jj's message
   (with-test-jj-repo
    (cl-letf (((symbol-function 'display-message-or-buffer)
               #'consult-jj-test-display-message-or-buffer))
-     (should-error (consult-jj-new "nonexistent-rev")
-                   :type 'jj-error))))
+     (let ((err (should-error (consult-jj-new "nonexistent-rev")
+                              :type 'jj-error)))
+       (should (string-match-p "doesn't exist"
+                               (error-message-string err)))))))
 
 (ert-deftest consult-jj-edit ()
   ;; jj edit moves the working copy to the revision and shows the result
@@ -454,7 +459,7 @@ index 0000000000..aa39060d7e
            (should (eq (buffer-local-value 'major-mode buffer)
                        'consult-jj-describe-mode))
            (should (string-equal
-                    (buffer-local-value 'consult-jj-describe-revision buffer)
+                    (buffer-local-value 'consult-jj--describe-revision buffer)
                     change-id)))
        (kill-buffer buffer))))
 
@@ -481,7 +486,7 @@ index 0000000000..aa39060d7e
          (unwind-protect
              (progn
                (should (string-equal
-                        (buffer-local-value 'consult-jj-describe-revision buffer)
+                        (buffer-local-value 'consult-jj--describe-revision buffer)
                         expected))
                (should (string-match-p "first-commit"
                                        (consult-jj-test-buffer-string buffer))))
@@ -508,15 +513,17 @@ index 0000000000..aa39060d7e
        (should (string-equal (consult-jj-test-description change-id repo-dir)
                              "new-description\n")))))
 
-  ;; when the revision does not exist, then a jj-error is signaled and the
-  ;; buffer is left alive
+  ;; when the revision does not exist, then a jj-error is signaled with jj's
+  ;; message and the buffer is left alive
   (with-test-jj-repo
    (consult-jj-test-sh "jj describe -m old-description")
    (let ((buffer (consult-jj-describe "@")))
      (with-current-buffer buffer
-       (setq-local consult-jj-describe-revision "nonexistent-rev")
-       (should-error (consult-jj-describe-accept)
-                     :type 'jj-error)
+       (setq-local consult-jj--describe-revision "nonexistent-rev")
+       (let ((err (should-error (consult-jj-describe-accept)
+                                :type 'jj-error)))
+         (should (string-match-p "doesn't exist"
+                                 (error-message-string err))))
        (should (buffer-live-p (current-buffer))))
      (kill-buffer buffer))))
 

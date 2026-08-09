@@ -15,11 +15,23 @@ JJ integration for Emacs.
 | ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                                                                |
 | ~consult-jj-describe~      | Edit the description of a revision in a ~*jj-describe*~ buffer; prompts for a revision.                        |
 
+* JJ Describe
+
+Editing a change description opens a ~consult-jj-describe-mode~ buffer
+containing the current description followed by comment lines prefixed with
+~JJ:~.  Those comment lines are stripped before the description is saved.
+
+| Key       | Function                     | Description                                                                         |
+|-----------+------------------------------+-------------------------------------------------------------------------------------|
+| ~C-c C-c~ | ~consult-jj-describe-accept~ | Set the buffer's contents as the description of the revision, then kill the buffer. |
+| ~C-c C-k~ | ~consult-jj-describe-reject~ | Kill the buffer without saving the description.                                     |
+| ~C-c C-d~ | ~consult-jj-describe-diff~   | Show the diff of the change being described.                                        |
+
 * Configuration
 
-| Variable                 | Default | Description                                                                |
-|--------------------------+---------+----------------------------------------------------------------------------|
-| ~consult-jj-executable~  | ~"jj"~  | Path to the jj executable.                                                 |
+| Variable                | Default | Description                |
+|-------------------------+---------+----------------------------|
+| ~consult-jj-executable~ | ~"jj"~  | Path to the jj executable. |
 
 Example:
 

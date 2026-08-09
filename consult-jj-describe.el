@@ -15,7 +15,7 @@
 (require 'consult-jj-diff)
 (require 'markdown-mode)
 
-(defvar-local consult-jj-describe-revision nil
+(defvar-local consult-jj--describe-revision nil
   "Change id of the revision whose description is being edited.
 
 Buffer-local in `consult-jj-describe-mode' buffers.")
@@ -24,10 +24,10 @@ Buffer-local in `consult-jj-describe-mode' buffers.")
   "Major mode for editing a jj change description.
 
 The revision being edited is recorded in the buffer-local variable
-`consult-jj-describe-revision'.  `consult-jj-describe-accept' sets the new
+`consult-jj--describe-revision'.  `consult-jj-describe-accept' sets the new
 description on the change and kills the buffer.  `consult-jj-describe-reject'
 discards the edit and kills the buffer."
-  (setq-local consult-jj-describe-revision nil))
+  (setq-local consult-jj--describe-revision nil))
 
 (define-key consult-jj-describe-mode-map (kbd "C-c C-c") #'consult-jj-describe-accept)
 (define-key consult-jj-describe-mode-map (kbd "C-c C-k") #'consult-jj-describe-reject)
@@ -56,7 +56,7 @@ removes those comment lines before sending the buffer to
 `jj describe --stdin'.
 
 Enables `consult-jj-describe-mode' and records REV in
-`consult-jj-describe-revision'."
+`consult-jj--describe-revision'."
   (let* ((describe-template (string-join
                              '("description"
                                "\"\\n\""
@@ -72,10 +72,10 @@ Enables `consult-jj-describe-mode' and records REV in
                                           "-T" describe-template
                                           "--no-graph" "-r" rev)))
     (unless (zerop status)
-      (signal 'jj-error (buffer-string))))
+      (consult-jj--signal (buffer-string))))
   (consult-jj-describe-mode)
   (setq-local
-   consult-jj-describe-revision rev
+   consult-jj--describe-revision rev
    header-line-format (substitute-command-keys
                        (string-join
                         '("JJ Describe"
@@ -88,7 +88,7 @@ Enables `consult-jj-describe-mode' and records REV in
   "Set the buffer's contents as the description of the revision.
 
 Sends the buffer to `jj describe --stdin' for the revision in
-`consult-jj-describe-revision', then kills the buffer."
+`consult-jj--describe-revision', then kills the buffer."
   (interactive)
   (flush-lines "^JJ:" (point-min) (point-max))
   (delete-trailing-whitespace)
@@ -102,13 +102,21 @@ Sends the buffer to `jj describe --stdin' for the revision in
     (skip-chars-forward "\n")
     (unless (= (point) start)
       (delete-region start (point))))
-  (let ((status (call-process-region (point-min) (point-max)
-                                     consult-jj-executable nil nil t
-                                     "--color" "never" "--no-pager"
-                                     "describe" "-r" consult-jj-describe-revision
-                                     "--stdin")))
-    (unless (zerop status)
-      (signal 'jj-error (buffer-string))))
+  (let ((error-file (make-temp-file "consult-jj-describe-")))
+    (unwind-protect
+        (let ((status (call-process-region (point-min) (point-max)
+                                           consult-jj-executable nil
+                                           (list nil error-file)
+                                           nil
+                                           "--color" "never" "--no-pager"
+                                           "describe" "-r" consult-jj--describe-revision
+                                           "--stdin")))
+          (unless (zerop status)
+            (consult-jj--signal
+             (with-temp-buffer
+               (insert-file-contents error-file)
+               (buffer-string)))))
+      (delete-file error-file)))
   (display-message-or-buffer "Description updated")
   (kill-buffer))
 
@@ -120,14 +128,14 @@ Sends the buffer to `jj describe --stdin' for the revision in
 (defun consult-jj-describe-diff ()
   "Show the diff of the change being described in the current buffer.
 
-Displays the diff of `consult-jj-describe-revision' using
+Displays the diff of `consult-jj--describe-revision' using
 `consult-jj-diff-at', which pops to the \"*jj-diff*\" buffer."
   (interactive)
   (unless (derived-mode-p 'consult-jj-describe-mode)
     (user-error "Not in a `consult-jj-describe-mode' buffer"))
-  (unless consult-jj-describe-revision
+  (unless consult-jj--describe-revision
     (user-error "No revision is being described in this buffer"))
-  (consult-jj-diff-at consult-jj-describe-revision))
+  (consult-jj-diff-at consult-jj--describe-revision))
 
 (provide 'consult-jj-describe)
 ;;; consult-jj-describe.el ends here
