@@ -12,6 +12,22 @@ JJ integration for Emacs.
 | ~consult-jj-diff-from~ | Show the diff of the working copy from a revision in a ~*jj-diff*~ buffer;  prompts for a revision.            |
 | ~consult-jj-new~       | Create a new change on top of a revision; prompts for a revision.                                              |
 | ~consult-jj-edit~      | Move the working copy to a revision; prompts for a revision.                                                   |
+| ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                                                            |
+| ~consult-jj-describe~  | Edit the description of a revision in a ~*jj-describe*~ buffer; prompts for a revision.                        |
+
+* Describe mode
+
+~jj-describe-mode~ is a major mode, derived from ~markdown-mode~, for editing
+the description of a jj change.  It is enabled in the ~*jj-describe*~ buffer
+created by ~consult-jj-describe~.
+
+The change being edited is stored in the buffer-local variable
+~jj-describe-revision~.
+
+| Keybinding | Command              | Description                                        |
+|------------+----------------------+----------------------------------------------------|
+| ~C-c C-c~  | ~jj-describe-accept~ | Set the description on the change and kill the buffer. |
+| ~C-c C-k~  | ~jj-describe-reject~ | Discard the edit and kill the buffer.              |
 
 * Configuration
 

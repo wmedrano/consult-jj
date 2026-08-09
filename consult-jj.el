@@ -1,6 +1,6 @@
 ;;; consult-jj.el --- JJ integration for consult  -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "30"))
+;; Package-Requires: ((emacs "30") (markdown-mode "2.0"))
 
 ;; Author: Will Medrano <wmedrano@wmedrano.dev>
 
@@ -13,6 +13,7 @@
 (require 'subr-x)
 (require 'cl-lib)
 (require 'ansi-color)
+(require 'markdown-mode)
 
 (defgroup consult-jj nil
   "JJ integration for consult."
@@ -67,10 +68,10 @@ its `default-directory' is set to the root of the current jj repository.
 Returns the buffer."
   (declare (indent 1))
   `(let ((root              (consult-jj-root))
-         (inhibit-read-only t)
          (buffer            (get-buffer-create ,name)))
      (with-current-buffer buffer
        (setq-local default-directory root)
+       (read-only-mode -1)
        (erase-buffer)
        (delete-all-overlays)
        ,@body
@@ -83,8 +84,7 @@ The buffer is created with `generate-new-buffer', so a unique name is used
 if NAME is already taken.  Its `default-directory' is set to the root of the
 current jj repository.  Returns the buffer."
   (declare (indent 1))
-  `(let ((default-directory              (consult-jj-root))
-         (inhibit-read-only t)
+  `(let ((default-directory (consult-jj-root))
          (buffer            (generate-new-buffer ,name)))
      (with-current-buffer buffer
        ,@body
@@ -116,7 +116,7 @@ ON-DONE is called in the process buffer when the process exits."
 
 (declare-function vertico--candidate "vertico")
 
-(defun consult-jj--read-revision (prompt-prefix default-revision)
+(defun consult-jj-read-revision (prompt-prefix default-revision)
   "Read a revision from the user.
 
 PROMPT-PREFIX is prepended to the prompt.
@@ -279,7 +279,7 @@ The diff is generated asynchronously and displayed with
 If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
 diff is generated asynchronously and displayed with `diff-mode'."
   (interactive)
-  (let* ((rev    (or rev (consult-jj--read-revision "jj diff at" "@")))
+  (let* ((rev    (or rev (consult-jj-read-revision "jj diff at" "@")))
          (buffer (consult-jj--with-reused-buffer "*jj-diff*"
                    (consult-jj-diff-at--start rev))))
     (pop-to-buffer buffer)
@@ -298,7 +298,7 @@ When called interactively, prompt for FROM-REV with `completing-read',
 defaulting to \"@-\".  The diff is generated asynchronously and
 displayed with `diff-mode'."
   (interactive)
-  (let* ((from-rev (or from-rev (consult-jj--read-revision "jj diff from" "@-")))
+  (let* ((from-rev (or from-rev (consult-jj-read-revision "jj diff from" "@-")))
          (buffer   (consult-jj--with-reused-buffer "*jj-diff*"
                      (consult-jj-diff-from--start from-rev))))
     (pop-to-buffer buffer)
@@ -316,7 +316,111 @@ displayed with `diff-mode'."
   (read-only-mode 1))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Commands
+;; Describe
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defvar-local consult-jj-describe-revision nil
+  "Change id of the revision whose description is being edited.
+
+Buffer-local in `consult-jj-describe-mode' buffers.")
+
+(define-derived-mode consult-jj-describe-mode markdown-mode "jj-describe"
+  "Major mode for editing a jj change description.
+
+The revision being edited is recorded in the buffer-local variable
+`consult-jj-describe-revision'.  `consult-jj-describe-accept' sets the new
+description on the change and kills the buffer.  `consult-jj-describe-reject'
+discards the edit and kills the buffer."
+  (setq-local consult-jj-describe-revision nil))
+
+(define-key consult-jj-describe-mode-map (kbd "C-c C-c") #'consult-jj-describe-accept)
+(define-key consult-jj-describe-mode-map (kbd "C-c C-k") #'consult-jj-describe-reject)
+
+;;;###autoload
+(defun consult-jj-describe (&optional rev)
+  "Edit the description of revision REV in a \"*jj-describe*\" buffer.
+
+If REV is nil, prompt with `completing-read', defaulting to \"@\"."
+  (interactive)
+  (let* ((rev    (or rev (consult-jj-read-revision "jj describe" "@")))
+         ;; TODO: If a jj-describe buffer already exists for `rev', we should
+         ;; use that.
+         (buffer (consult-jj--with-new-buffer "*jj-describe*"
+                   (consult-jj-describe--start rev))))
+    (pop-to-buffer buffer)
+    buffer))
+
+(defun consult-jj-describe--start (rev)
+  "Dump the description of REV into the current buffer.
+
+The description is followed by a comment block prefixed with
+\"JJ: \", showing the change id.  `consult-jj-describe-accept'
+removes those comment lines before sending the buffer to
+`jj describe --stdin'.
+
+Enables `consult-jj-describe-mode' and records REV in
+`consult-jj-describe-revision'."
+  (let* ((describe-template (string-join
+                             '("description"
+                               "\"\\n\""
+                               "\"JJ: Change ID: \""
+                               "change_id.shortest()"
+                               "\"\\n\""
+                               "\"JJ:\\n\""
+                               "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
+                             " ++ "))
+         (status            (call-process consult-jj-executable nil t nil
+                                          "--color" "never" "--no-pager"
+                                          "log"
+                                          "-T" describe-template
+                                          "--no-graph" "-r" rev)))
+    (unless (zerop status)
+      (signal 'jj-error (buffer-string))))
+  (consult-jj-describe-mode)
+  (setq-local
+   consult-jj-describe-revision rev
+   header-line-format (substitute-command-keys
+                       (string-join
+                        '("JJ Describe"
+                          "Accept (\\[consult-jj-describe-accept])"
+                          "Reject (\\[consult-jj-describe-reject])")
+                        " | "))))
+
+(defun consult-jj-describe-accept ()
+  "Set the buffer's contents as the description of the revision.
+
+Sends the buffer to `jj describe --stdin' for the revision in
+`consult-jj-describe-revision', then kills the buffer."
+  (interactive)
+  (delete-trailing-whitespace)
+  (flush-lines "^JJ:" (point-min) (point-max))
+  (let ((end (point-max)))
+    (goto-char end)
+    (skip-chars-backward "\n")
+    (unless (= (point) end)
+      (delete-region (point) end)))
+  (goto-char (point-min))
+  (let ((start (point)))
+    (skip-chars-forward "\n")
+    (unless (= (point) start)
+      (delete-region start (point))))
+  (let ((status (call-process-region (point-min) (point-max)
+                                     consult-jj-executable nil nil t
+                                     "--color" "never" "--no-pager"
+                                     "describe" "-r" consult-jj-describe-revision
+                                     "--stdin")))
+    (unless (zerop status)
+      (signal 'jj-error (buffer-string))))
+  (display-message-or-buffer "Description updated")
+  (kill-buffer))
+
+(defun consult-jj-describe-reject ()
+  "Kill the buffer without saving the description."
+  (interactive)
+  (kill-buffer))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; New/Edit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun consult-jj--run-command (args)
@@ -337,7 +441,7 @@ Runs synchronously and signals a `jj-error' on failure."
 If REV is nil, then prompt with `completing-read', defaulting to \"@\".
 Runs `jj new' synchronously and displays its output."
   (interactive)
-  (let ((rev (or rev (consult-jj--read-revision "jj new" "@"))))
+  (let ((rev (or rev (consult-jj-read-revision "jj new" "@"))))
     (consult-jj--run-command `("new" ,rev))))
 
 ;;;###autoload
@@ -347,7 +451,7 @@ Runs `jj new' synchronously and displays its output."
 If REV is nil, then prompt with `completing-read', defaulting to \"@\".
 Runs `jj edit' synchronously and displays its output."
   (interactive)
-  (let ((rev (or rev (consult-jj--read-revision "jj edit" "@"))))
+  (let ((rev (or rev (consult-jj-read-revision "jj edit" "@"))))
     (consult-jj--run-command `("edit" ,rev))))
 
 (provide 'consult-jj)

@@ -3,6 +3,8 @@
 (require 'ert)
 (require 'consult-jj)
 
+(defvar consult-jj-describe-mode-map)
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
@@ -57,6 +59,17 @@ Waits for all processes in buffer to terminate before getting the string."
       (while (process-live-p proc)
         (sleep-for 0.01)))
     (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun consult-jj-test-description (rev &optional directory)
+  "Get the description of REV from jj.
+
+Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
+  (with-temp-buffer
+    (let ((default-directory (or directory default-directory)))
+      (call-process consult-jj-executable nil t nil
+                    "--color" "never" "--no-pager"
+                    "log" "--no-graph" "-r" rev "-T" "description"))
+    (buffer-string)))
 
 (defvar consult-jj-test-message nil
   "Message captured by the `display-message-or-buffer' stub.")
@@ -270,13 +283,13 @@ Waits for all processes in buffer to terminate before getting the string."
     (consult-jj--read-revision-highlight-candidate nil nil)
     (should-not (overlays-in (point-min) (point-max)))))
 
-(ert-deftest consult-jj--read-revision ()
+(ert-deftest consult-jj-read-revision ()
   ;; when the user enters empty input, then the default revision is returned
   (with-test-jj-repo
    (consult-jj-test-sh "jj commit -m first-commit")
    (cl-letf (((default-value 'completing-read-function)
               (lambda (&rest _) "")))
-     (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+     (should (string-equal (consult-jj-read-revision "jj diff at" "@-")
                            "@-"))))
 
   ;; when the user selects a candidate, then the change id is returned
@@ -289,15 +302,15 @@ Waits for all processes in buffer to terminate before getting the string."
      (kill-buffer log-buffer)
      (cl-letf (((default-value 'completing-read-function)
                 (lambda (&rest _) (car candidate))))
-       (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+       (should (string-equal (consult-jj-read-revision "jj diff at" "@-")
                              expected)))))
   ;; when the user enters custom text that matches no candidate,
   ;; then the text is passed through unchanged
   (with-test-jj-repo
    (consult-jj-test-sh "jj commit -m first-commit")
-   (cl-letf (((default-value 'completing-read-function)
-              (lambda (&rest _) "custom revset")))
-     (should (string-equal (consult-jj--read-revision "jj diff at" "@-")
+    (cl-letf (((default-value 'completing-read-function)
+               (lambda (&rest _) "custom revset")))
+     (should (string-equal (consult-jj-read-revision "jj diff at" "@-")
                            "custom revset")))))
 
 (ert-deftest consult-jj-diff-at ()
@@ -415,3 +428,126 @@ index 0000000000..aa39060d7e
               #'consult-jj-test-display-message-or-buffer))
      (should-error (consult-jj-edit "nonexistent-rev")
                    :type 'jj-error))))
+
+(ert-deftest consult-jj-describe-mode-keybindings ()
+  ;; the mode is derived from markdown-mode
+  (should (eq (get 'consult-jj-describe-mode 'derived-mode-parent)
+              'markdown-mode))
+  ;; C-c C-c accepts the description
+  (should (eq (lookup-key consult-jj-describe-mode-map (kbd "C-c C-c"))
+              #'consult-jj-describe-accept))
+  ;; C-c C-k rejects the description
+  (should (eq (lookup-key consult-jj-describe-mode-map (kbd "C-c C-k"))
+              #'consult-jj-describe-reject)))
+
+(ert-deftest consult-jj-describe ()
+  ;; when a revision has a description, then the new buffer shows it in
+  ;; consult-jj-describe-mode with the change id stored as a buffer-local variable
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m first-commit")
+   (let* ((change-id (consult-jj--rev-change-id "@"))
+          (buffer    (consult-jj-describe change-id)))
+     (unwind-protect
+         (progn
+           (should (string-match-p "^first-commit\n\nJJ: Change ID: "
+                                   (consult-jj-test-buffer-string buffer)))
+           (should (eq (buffer-local-value 'major-mode buffer)
+                       'consult-jj-describe-mode))
+           (should (string-equal
+                    (buffer-local-value 'consult-jj-describe-revision buffer)
+                    change-id)))
+       (kill-buffer buffer))))
+
+  ;; when a revision has no description, then the buffer only contains the
+  ;; comment block
+  (with-test-jj-repo
+   (let ((buffer (consult-jj-describe (consult-jj--rev-change-id "@"))))
+     (unwind-protect
+         (should (string-match-p "^JJ: Change ID: "
+                                 (consult-jj-test-buffer-string buffer)))
+       (kill-buffer buffer))))
+
+  ;; when invoked without a revision, then the selected revision is described
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m first-commit")
+   (let* ((log-buffer (consult-jj--log))
+          (candidate  (car (consult-jj--log-candidates log-buffer)))
+          (expected   (consult-jj--revision-change-id
+                       (overlay-get (cdr candidate) 'consult-jj--revision))))
+     (kill-buffer log-buffer)
+     (cl-letf (((default-value 'completing-read-function)
+                (lambda (&rest _) (car candidate))))
+       (let ((buffer (consult-jj-describe)))
+         (unwind-protect
+             (progn
+               (should (string-equal
+                        (buffer-local-value 'consult-jj-describe-revision buffer)
+                        expected))
+               (should (string-match-p "first-commit"
+                                       (consult-jj-test-buffer-string buffer))))
+           (kill-buffer buffer)))))))
+
+(ert-deftest consult-jj-describe-accept ()
+  ;; when the description is edited and accepted, then the description is set
+  ;; on the change and the buffer is killed
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m old-description")
+   (let ((repo-dir default-directory))
+     (let* ((change-id (consult-jj--rev-change-id "@"))
+            (buffer    (consult-jj-describe change-id)))
+       (with-current-buffer buffer
+         (erase-buffer)
+         (insert "new-description")
+         (cl-letf (((symbol-function 'display-message-or-buffer)
+                    #'consult-jj-test-display-message-or-buffer))
+           (setq consult-jj-test-message nil)
+           (consult-jj-describe-accept)))
+       (should (string-equal consult-jj-test-message
+                             "Description updated"))
+       (should-not (buffer-live-p buffer))
+       (should (string-equal (consult-jj-test-description change-id repo-dir)
+                             "new-description\n")))))
+
+  ;; when the revision does not exist, then a jj-error is signaled and the
+  ;; buffer is left alive
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m old-description")
+   (let ((buffer (consult-jj-describe "@")))
+     (with-current-buffer buffer
+       (setq-local consult-jj-describe-revision "nonexistent-rev")
+       (should-error (consult-jj-describe-accept)
+                     :type 'jj-error)
+       (should (buffer-live-p (current-buffer))))
+     (kill-buffer buffer))))
+
+(ert-deftest consult-jj-describe-accept-strips-comments ()
+  ;; when the buffer contains the template's "JJ:" comment lines, then they are
+  ;; stripped before the description is set
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m old-description")
+   (let ((repo-dir default-directory))
+     (let* ((change-id (consult-jj--rev-change-id "@"))
+            (buffer    (consult-jj-describe change-id)))
+       (with-current-buffer buffer
+         (cl-letf (((symbol-function 'display-message-or-buffer)
+                    #'consult-jj-test-display-message-or-buffer))
+           (setq consult-jj-test-message nil)
+           (consult-jj-describe-accept)))
+       (should (string-equal (consult-jj-test-description change-id repo-dir)
+                             "old-description\n"))))))
+
+(ert-deftest consult-jj-describe-reject ()
+  ;; when the description is edited and rejected, then the buffer is killed
+  ;; and the description is left unchanged
+  (with-test-jj-repo
+   (consult-jj-test-sh "jj describe -m original")
+   (let ((repo-dir default-directory))
+     (let* ((change-id (consult-jj--rev-change-id "@"))
+            (buffer    (consult-jj-describe change-id)))
+       (with-current-buffer buffer
+         (erase-buffer)
+         (insert "not saved")
+         (consult-jj-describe-reject))
+       (should-not (buffer-live-p buffer))
+       (should (string-equal (consult-jj-test-description change-id repo-dir)
+                             "original\n"))))))
