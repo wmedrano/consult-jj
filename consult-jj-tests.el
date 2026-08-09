@@ -2,8 +2,8 @@
 
 (require 'ert)
 (require 'consult-jj)
-
-(defvar consult-jj-describe-mode-map)
+(require 'consult-jj-diff)
+(require 'consult-jj-describe)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -173,7 +173,7 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
 
 (ert-deftest consult-jj--log-candidates-no-description ()
   ;; when a revision has no description, then the candidate shows
-  ;; "(no description set)" styled with font-lock-comment-face
+  ;; "(no description set)" styled with consult-jj-no-description-face
   (with-temp-buffer
     (insert
      "@  " (consult-jj-test-revision-json
@@ -191,7 +191,7 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
       (let ((pos (string-search "(no description set)" (car candidate))))
         (should pos)
         (should (eq (get-text-property pos 'face (car candidate))
-                    'font-lock-comment-face))))))
+                    'consult-jj-no-description-face))))))
 
 
 

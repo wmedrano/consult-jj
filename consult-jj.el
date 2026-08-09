@@ -1,6 +1,6 @@
 ;;; consult-jj.el --- JJ integration for consult  -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "30") (markdown-mode "2.0"))
+;; Package-Requires: ((emacs "30"))
 
 ;; Author: Will Medrano <wmedrano@wmedrano.dev>
 
@@ -12,8 +12,6 @@
 
 (require 'subr-x)
 (require 'cl-lib)
-(require 'ansi-color)
-(require 'markdown-mode)
 
 (defgroup consult-jj nil
   "JJ integration for consult."
@@ -290,169 +288,6 @@ change id (trimmed to 8 characters), description, and bookmarks."
         (error "JJ log failed: %s" (buffer-string)))
       (goto-char (point-min))
       (json-parse-buffer :object-type 'alist :array-type 'list))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Diff
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;###autoload
-(defun consult-jj-diff (arg)
-  "Show the diff of revision REV in a \"*jj-diff*\" buffer.
-
-When called interactively with a prefix ARG, behave as
-`consult-jj-diff-from'; otherwise, behave as `consult-jj-diff-at'.
-The diff is generated asynchronously and displayed with
-`diff-mode'."
-  (interactive "P")
-  (if arg
-      (funcall-interactively #'consult-jj-diff-from)
-    (funcall-interactively #'consult-jj-diff-at)))
-
-;;;###autoload
-(defun consult-jj-diff-at (&optional rev)
-  "Show the diff of revision REV in a \"*jj-diff*\" buffer.
-
-If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
-diff is generated asynchronously and displayed with `diff-mode'."
-  (interactive)
-  (let* ((rev    (or rev (consult-jj-read-revision "jj diff at" "@")))
-         (buffer (consult-jj--with-reused-buffer "*jj-diff*"
-                   (consult-jj-diff-at--start rev))))
-    (pop-to-buffer buffer)
-    buffer))
-
-(defun consult-jj-diff-at--start (rev)
-  "Start generating the diff at revision REV."
-  (consult-jj--start-process `("diff" "--git" "-r" ,rev)
-                             :on-done #'consult-jj-diff--finalize))
-
-;;;###autoload
-(defun consult-jj-diff-from (&optional from-rev)
-  "Show the diff of the working copy from FROM-REV in a \"*jj-diff*\" buffer.
-
-When called interactively, prompt for FROM-REV with `completing-read',
-defaulting to \"@-\".  The diff is generated asynchronously and
-displayed with `diff-mode'."
-  (interactive)
-  (let* ((from-rev (or from-rev (consult-jj-read-revision "jj diff from" "@-")))
-         (buffer   (consult-jj--with-reused-buffer "*jj-diff*"
-                     (consult-jj-diff-from--start from-rev))))
-    (pop-to-buffer buffer)
-    buffer))
-
-(defun consult-jj-diff-from--start (from-rev)
-  "Start generating the diff from FROM-REV."
-  (consult-jj--start-process `("diff" "--git" "--from" ,from-rev)
-                             :on-done #'consult-jj-diff--finalize))
-
-(defun consult-jj-diff--finalize ()
-  "Finalize the diff buffer by enabling `diff-mode' and `read-only-mode'."
-  (goto-char (point-min))
-  (diff-mode)
-  (read-only-mode 1))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Describe
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defvar-local consult-jj-describe-revision nil
-  "Change id of the revision whose description is being edited.
-
-Buffer-local in `consult-jj-describe-mode' buffers.")
-
-(define-derived-mode consult-jj-describe-mode markdown-mode "jj-describe"
-  "Major mode for editing a jj change description.
-
-The revision being edited is recorded in the buffer-local variable
-`consult-jj-describe-revision'.  `consult-jj-describe-accept' sets the new
-description on the change and kills the buffer.  `consult-jj-describe-reject'
-discards the edit and kills the buffer."
-  (setq-local consult-jj-describe-revision nil))
-
-(define-key consult-jj-describe-mode-map (kbd "C-c C-c") #'consult-jj-describe-accept)
-(define-key consult-jj-describe-mode-map (kbd "C-c C-k") #'consult-jj-describe-reject)
-
-;;;###autoload
-(defun consult-jj-describe (&optional rev)
-  "Edit the description of revision REV in a \"*jj-describe*\" buffer.
-
-If REV is nil, prompt with `completing-read', defaulting to \"@\"."
-  (interactive)
-  (let* ((rev    (or rev (consult-jj-read-revision "jj describe" "@")))
-         ;; TODO: If a jj-describe buffer already exists for `rev', we should
-         ;; use that.
-         (buffer (consult-jj--with-new-buffer "*jj-describe*"
-                   (consult-jj-describe--start rev))))
-    (pop-to-buffer buffer)
-    buffer))
-
-(defun consult-jj-describe--start (rev)
-  "Dump the description of REV into the current buffer.
-
-The description is followed by a comment block prefixed with
-\"JJ: \", showing the change id.  `consult-jj-describe-accept'
-removes those comment lines before sending the buffer to
-`jj describe --stdin'.
-
-Enables `consult-jj-describe-mode' and records REV in
-`consult-jj-describe-revision'."
-  (let* ((describe-template (string-join
-                             '("description"
-                               "\"\\n\""
-                               "\"JJ: Change ID: \""
-                               "change_id.shortest()"
-                               "\"\\n\""
-                               "\"JJ:\\n\""
-                               "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
-                             " ++ "))
-         (status            (call-process consult-jj-executable nil t nil
-                                          "--color" "never" "--no-pager"
-                                          "log"
-                                          "-T" describe-template
-                                          "--no-graph" "-r" rev)))
-    (unless (zerop status)
-      (signal 'jj-error (buffer-string))))
-  (consult-jj-describe-mode)
-  (setq-local
-   consult-jj-describe-revision rev
-   header-line-format (substitute-command-keys
-                       (string-join
-                        '("JJ Describe"
-                          "Accept (\\[consult-jj-describe-accept])"
-                          "Reject (\\[consult-jj-describe-reject])")
-                        " | "))))
-
-(defun consult-jj-describe-accept ()
-  "Set the buffer's contents as the description of the revision.
-
-Sends the buffer to `jj describe --stdin' for the revision in
-`consult-jj-describe-revision', then kills the buffer."
-  (interactive)
-  (delete-trailing-whitespace)
-  (flush-lines "^JJ:" (point-min) (point-max))
-  (let ((end (point-max)))
-    (goto-char end)
-    (skip-chars-backward "\n")
-    (unless (= (point) end)
-      (delete-region (point) end)))
-  (goto-char (point-min))
-  (let ((start (point)))
-    (skip-chars-forward "\n")
-    (unless (= (point) start)
-      (delete-region start (point))))
-  (let ((status (call-process-region (point-min) (point-max)
-                                     consult-jj-executable nil nil t
-                                     "--color" "never" "--no-pager"
-                                     "describe" "-r" consult-jj-describe-revision
-                                     "--stdin")))
-    (unless (zerop status)
-      (signal 'jj-error (buffer-string))))
-  (display-message-or-buffer "Description updated")
-  (kill-buffer))
-
-(defun consult-jj-describe-reject ()
-  "Kill the buffer without saving the description."
-  (interactive)
-  (kill-buffer))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; New/Edit

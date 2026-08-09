@@ -6,7 +6,7 @@ emacs --batch \
   --eval '(package-activate-all)' \
   --eval '(add-to-list (quote load-path) default-directory)' \
   --eval '(setq byte-compile-error-on-warn t)' \
-  -f batch-byte-compile consult-jj.el
+  -f batch-byte-compile consult-jj.el consult-jj-diff.el consult-jj-describe.el
 
 echo "Byte compiling tests"
 emacs --batch \
@@ -19,7 +19,9 @@ echo "Running checkdoc"
 checkdoc_output=$(emacs --batch \
   --eval '(package-activate-all)' \
   --eval '(add-to-list (quote load-path) default-directory)' \
-  --eval '(checkdoc-file "consult-jj.el")' 2>&1)
+  --eval '(checkdoc-file "consult-jj.el")' \
+  --eval '(checkdoc-file "consult-jj-diff.el")' \
+  --eval '(checkdoc-file "consult-jj-describe.el")' 2>&1)
 if echo "$checkdoc_output" | grep -q "^Warning (emacs):"; then
     echo "$checkdoc_output"
     echo "Checkdoc warnings found."
