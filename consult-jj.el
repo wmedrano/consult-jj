@@ -97,23 +97,6 @@ Returns an error if the `default-directory' is not in a jj repository."
           result
         (consult-jj--signal result)))))
 
-(defmacro consult-jj--with-reused-buffer (name &rest body)
-  "Prepare the buffer NAME and execute BODY in it.
-
-The buffer is created if needed.  Otherwise, the buffer is reused, erased, and
-its `default-directory' is set to the root of the current jj repository.
-Returns the buffer."
-  (declare (indent 1))
-  `(let ((root              (consult-jj-root))
-         (buffer            (get-buffer-create ,name)))
-     (with-current-buffer buffer
-       (setq-local default-directory root)
-       (read-only-mode -1)
-       (erase-buffer)
-       (delete-all-overlays)
-       ,@body
-       buffer)))
-
 (defmacro consult-jj--with-new-buffer (name &rest body)
   "Create a new buffer named NAME and execute BODY in it.
 
@@ -121,8 +104,8 @@ The buffer is created with `generate-new-buffer', so a unique name is used
 if NAME is already taken.  Its `default-directory' is set to the root of the
 current jj repository.  Returns the buffer."
   (declare (indent 1))
-  `(let ((default-directory (consult-jj-root))
-         (buffer            (generate-new-buffer ,name)))
+  `(let* ((default-directory (consult-jj-root))
+          (buffer            (generate-new-buffer ,name)))
      (with-current-buffer buffer
        ,@body
        buffer)))

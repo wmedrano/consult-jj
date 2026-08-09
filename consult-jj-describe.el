@@ -129,7 +129,7 @@ Sends the buffer to `jj describe --stdin' for the revision in
   "Show the diff of the change being described in the current buffer.
 
 Displays the diff of `consult-jj--describe-revision' using
-`consult-jj-diff-at', which pops to the \"*jj-diff*\" buffer."
+`consult-jj-diff-at', which pops to a new \"*jj-diff*\" buffer."
   (interactive)
   (unless (derived-mode-p 'consult-jj-describe-mode)
     (user-error "Not in a `consult-jj-describe-mode' buffer"))
