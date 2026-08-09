@@ -306,25 +306,23 @@ Runs synchronously and signals a `jj-error' on failure."
       (funcall consult-jj--display-function (string-trim (buffer-string))))))
 
 ;;;###autoload
-(defun consult-jj-new (&optional rev)
+(defun consult-jj-new (rev)
   "Create a new change on top of revision REV.
 
-If REV is nil, then prompt with `completing-read', defaulting to \"@\".
-Runs `jj new' synchronously and displays its output."
-  (interactive)
-  (let ((rev (or rev (consult-jj-read-revision "jj new" "@"))))
-    (consult-jj--run-command `("new" ,rev))))
+REV is the revision.  When called interactively, prompt with `completing-read',
+defaulting to \"@\".  Runs `jj new' synchronously and displays its output."
+  (interactive (list (consult-jj-read-revision "jj new" "@")))
+  (consult-jj--run-command `("new" ,rev)))
 
 
 ;;;###autoload
-(defun consult-jj-edit (&optional rev)
+(defun consult-jj-edit (rev)
   "Move the working copy to revision REV.
 
-If REV is nil, then prompt with `completing-read', defaulting to \"@\".
-Runs `jj edit' synchronously and displays its output."
-  (interactive)
-  (let ((rev (or rev (consult-jj-read-revision "jj edit" "@"))))
-    (consult-jj--run-command `("edit" ,rev))))
+REV is the revision.  When called interactively, prompt with `completing-read',
+defaulting to \"@\".  Runs `jj edit' synchronously and displays its output."
+  (interactive (list (consult-jj-read-revision "jj edit" "@")))
+  (consult-jj--run-command `("edit" ,rev)))
 
 (provide 'consult-jj)
 ;;; consult-jj.el ends here

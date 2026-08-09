@@ -1,6 +1,6 @@
 ;;; consult-jj-describe.el --- Edit jj change descriptions -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "30") (markdown-mode "2.0") (consult-jj))
+;; Package-Requires: ((emacs "30") (markdown-mode "2.0"))
 
 ;; Author: Will Medrano <wmedrano@wmedrano.dev>
 
@@ -34,13 +34,13 @@ discards the edit and kills the buffer."
 (define-key consult-jj-describe-mode-map (kbd "C-c C-d") #'consult-jj-describe-diff)
 
 ;;;###autoload
-(defun consult-jj-describe (&optional rev)
+(defun consult-jj-describe (rev)
   "Edit the description of revision REV in a \"*jj-describe*\" buffer.
 
-If REV is nil, prompt with `completing-read', defaulting to \"@\"."
-  (interactive)
-  (let* ((rev    (or rev (consult-jj-read-revision "jj describe" "@")))
-         ;; TODO: If a jj-describe buffer already exists for `rev', we should
+REV is the revision.  When called interactively, prompt with `completing-read',
+defaulting to \"@\"."
+  (interactive (list (consult-jj-read-revision "jj describe" "@")))
+  (let* (;; TODO: If a jj-describe buffer already exists for `rev', we should
          ;; use that.
          (buffer (consult-jj--with-new-buffer "*jj-describe*"
                    (consult-jj--describe-start rev))))
@@ -128,6 +128,10 @@ Sends the buffer to `jj describe --stdin' for the revision in
 (defun consult-jj-describe-reject ()
   "Kill the buffer without saving the description."
   (interactive)
+  (unless (derived-mode-p 'consult-jj-describe-mode)
+    (user-error "Not in a `consult-jj-describe-mode' buffer"))
+  (unless consult-jj--describe-revision
+    (user-error "No revision is being described in this buffer"))
   (kill-buffer))
 
 (defun consult-jj-describe-diff ()

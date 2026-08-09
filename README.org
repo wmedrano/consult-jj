@@ -4,18 +4,25 @@ JJ integration for Emacs.
 
 * Functions
 
-| Functions                  | Description                                                                                                        |
-|----------------------------+--------------------------------------------------------------------------------------------------------------------|
-| ~consult-jj-root~          | Get the root directory or signal an error if not in a JJ repository.                                               |
-| ~consult-jj-diff~          | Show the diff of a revision in a new ~*jj-diff*~ buffer; with a prefix argument, behave as ~consult-jj-diff-from~. |
-| ~consult-jj-diff-at~       | Show the diff of a revision in a new ~*jj-diff*~ buffer; prompts for a revision.                                   |
-| ~consult-jj-diff-from~     | Show the diff of the working copy from a revision in a new ~*jj-diff*~ buffer;  prompts for a revision.            |
-| ~consult-jj-new~           | Create a new change on top of a revision; prompts for a revision.                                                  |
-| ~consult-jj-edit~          | Move the working copy to a revision; prompts for a revision.                                                       |
-| ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                                                                    |
-| ~consult-jj-describe~      | Edit the description of a revision in a ~*jj-describe*~ buffer; prompts for a revision.                            |
+| Functions                  | Description                                                          |
+|----------------------------+----------------------------------------------------------------------|
+| ~consult-jj-root~          | Get the root directory or signal an error if not in a JJ repository. |
+| ~consult-jj-new~           | Create a new change on top of a revision.                            |
+| ~consult-jj-edit~          | Move the working copy to a revision.                                 |
+| ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                      |
+
+* JJ Diff
+
+| Functions              | Description                                                                                                                                                                 |
+|------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ~consult-jj-diff-at~   | Show the diff of a revision in a new ~*jj-diff*~ buffer.                                                                                                                    |
+| ~consult-jj-diff-from~ | Show the diff from a revision to the working copy in a new ~*jj-diff*~ buffer; with a prefix argument, also prompt for a second revision and show the diff between the two. |
 
 * JJ Describe
+
+| Functions             | Description                                                     |
+|-----------------------+-----------------------------------------------------------------|
+| ~consult-jj-describe~ | Edit the description of a revision in a ~*jj-describe*~ buffer. |
 
 Editing a change description opens a ~consult-jj-describe-mode~ buffer
 containing the current description followed by comment lines prefixed with
