@@ -27,8 +27,10 @@ command as a string."
 (defmacro with-test-repo (&rest body)
   "Run BODY in a fresh temporary jj repository.
 
-The temporary directory is deleted after BODY succeeds.  If BODY signals
-an error, the directory is kept and its path is printed for inspection."
+During BODY, `test-repo-buffer' is bound to the temporary buffer in
+which the repository is set up.  The temporary directory is deleted
+after BODY succeeds.  If BODY signals an error, the directory is kept
+and its path is printed for inspection."
   (declare (indent 0) (debug body))
   (let ((temp-dir  (gensym "temp-dir"))
         (succeeded (gensym "test-repo-succeeded")))
@@ -40,7 +42,9 @@ an error, the directory is kept and its path is printed for inspection."
        (unwind-protect
            (with-temp-buffer
              (test-sh "jj git init")
-             ,@body
+             (let ((test-repo-buffer (current-buffer)))
+               (ignore test-repo-buffer) ;; For byte compile warning
+               ,@body)
              (setq ,succeeded t))
          (if ,succeeded
              (delete-directory ,temp-dir t)
@@ -342,11 +346,10 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-at-creates-a-new-buffer-each-time ()
   (with-test-repo
-    (let ((repo-buffer (current-buffer))
-          (first (consult-jj-diff-at "@")))
+    (let ((first (consult-jj-diff-at "@")))
       (test-wait-for-process first)
       (kill-buffer first)
-      (with-current-buffer repo-buffer
+      (with-current-buffer test-repo-buffer
         (as-temp-buffer (consult-jj-diff-at "@")
           (test-wait-for-process (current-buffer))
           (should-not (eq first (current-buffer))))))))
@@ -495,10 +498,9 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest describe-creates-a-new-buffer-each-time ()
   (with-test-repo
-    (let ((repo-buffer (current-buffer))
-          (first (consult-jj-describe "@")))
+    (let ((first (consult-jj-describe "@")))
       (kill-buffer first)
-      (with-current-buffer repo-buffer
+      (with-current-buffer test-repo-buffer
         (as-temp-buffer (consult-jj-describe "@")
           (should-not (eq first (current-buffer))))))))
 
@@ -617,11 +619,10 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-from-creates-a-new-buffer-each-time ()
   (with-test-repo
-    (let ((repo-buffer (current-buffer))
-          (first       (consult-jj-diff-from "@")))
+    (let ((first       (consult-jj-diff-from "@")))
       (test-wait-for-process first)
       (kill-buffer first)
-      (with-current-buffer repo-buffer
+      (with-current-buffer test-repo-buffer
         (as-temp-buffer (consult-jj-diff-from "@")
           (test-wait-for-process (current-buffer))
           (should-not (eq first (current-buffer))))))))
