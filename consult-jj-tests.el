@@ -38,7 +38,7 @@ an error, the directory is kept and its path is printed for inspection."
             (consult-jj--display-function #'ignore)
             (,succeeded nil))
        (unwind-protect
-           (progn
+           (with-temp-buffer
              (test-sh "jj git init")
              ,@body
              (setq ,succeeded t))
@@ -48,17 +48,24 @@ an error, the directory is kept and its path is printed for inspection."
                     ,temp-dir))))))
 
 (defmacro as-temp-buffer (buffer &rest body)
-  "Run BODY with the curent buffer as BUFFER.
+  "Run BODY with the current buffer as BUFFER.
 
-BUFFER is killed on completion."
+BUFFER is killed on completion.  The buffer that was current before
+entering is restored afterwards, even if BUFFER is killed by BODY, so
+that `default-directory' (which is buffer-local) is not left pointing
+outside the test repository."
   (declare (indent 1))
-  (let ((buf (gensym "buf")))
-    `(let ((,buf ,buffer))
+  (let ((buf (gensym "buf"))
+        (prev (gensym "prev")))
+    `(let* ((,prev (current-buffer))
+            (,buf ,buffer))
        (unwind-protect
            (with-current-buffer ,buf
              ,@body)
          (when (buffer-live-p ,buf)
-           (kill-buffer ,buf))))))
+           (kill-buffer ,buf))
+         (when (buffer-live-p ,prev)
+           (set-buffer ,prev))))))
 
 (defmacro with-completing-read (result-fn &rest body)
   "Execute BODY with `completing-read' stubbed to call RESULT-FN.
@@ -108,16 +115,16 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest root-returns-root-directory ()
   (with-test-repo
-   (should (string= (consult-jj-root)
-                    default-directory))))
+    (should (string= (consult-jj-root)
+                     default-directory))))
 
 (ert-deftest root-in-subdirectory-returns-root-directory ()
   (with-test-repo
-   (let ((root default-directory))
-     (test-write-file "foo/bar/baz.txt" "")
-     (with-current-buffer (find-file "foo/bar/baz.txt")
-       (should (string= (consult-jj-root)
-                        root))))))
+    (let ((root default-directory))
+      (test-write-file "foo/bar/baz.txt" "")
+      (with-current-buffer (find-file "foo/bar/baz.txt")
+        (should (string= (consult-jj-root)
+                         root))))))
 
 (ert-deftest root-outside-repo-returns-error ()
   (let ((default-directory "/tmp"))
@@ -130,23 +137,23 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest empty-input-returns-default-revision ()
   (with-test-repo
-   (with-completing-read (lambda (&rest _) "")
-     (should (string= (consult-jj-read-revision "jj new" "@some-ref")
-                      "@some-ref")))))
+    (with-completing-read (lambda (&rest _) "")
+      (should (string= (consult-jj-read-revision "jj new" "@some-ref")
+                       "@some-ref")))))
 
 (ert-deftest candidate-selection-returns-change-id ()
   (with-test-repo
-   (let ((expected-change-id (consult-jj--rev-change-id "@")))
-     (with-completing-read (lambda (_prompt table &rest _)
-                             (caar table))
-       (should (string= (consult-jj-read-revision "jj new" "@")
-                        expected-change-id))))))
+    (let ((expected-change-id (consult-jj--rev-change-id "@")))
+      (with-completing-read (lambda (_prompt table &rest _)
+                              (caar table))
+        (should (string= (consult-jj-read-revision "jj new" "@")
+                         expected-change-id))))))
 
 (ert-deftest custom-text-input-returns-itself ()
   (with-test-repo
-   (with-completing-read (lambda (&rest _) "my-custom-revision")
-                         (should (string= (consult-jj-read-revision "jj edit" "@")
-                                          "my-custom-revision")))))
+    (with-completing-read (lambda (&rest _) "my-custom-revision")
+      (should (string= (consult-jj-read-revision "jj edit" "@")
+                       "my-custom-revision")))))
 
 (ert-deftest outside-jj-repo-signals-jj-error ()
   (let ((default-directory "/tmp"))
@@ -155,38 +162,38 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest log-buffer-is-cleaned-up-after-completion ()
   (with-test-repo
-   (let (log-buffer-exists-during-completion)
-     (with-completing-read (lambda (&rest _)
+    (let (log-buffer-exists-during-completion)
+      (with-completing-read (lambda (&rest _)
                               (setq log-buffer-exists-during-completion
                                     (cl-find "*jj-log*" (mapcar #'buffer-name (buffer-list))
                                              :test #'string-prefix-p))
-                             "")
-                           (consult-jj-read-revision "jj new" "@"))
-     (should log-buffer-exists-during-completion)
-     (should-not (cl-find "*jj-log*" (mapcar #'buffer-name (buffer-list))
-                          :test #'string-prefix-p)))))
+                              "")
+        (consult-jj-read-revision "jj new" "@"))
+      (should log-buffer-exists-during-completion)
+      (should-not (cl-find "*jj-log*" (mapcar #'buffer-name (buffer-list))
+                           :test #'string-prefix-p)))))
 
 (ert-deftest prompt-includes-prefix-and-default-revision ()
   (with-test-repo
-   (let (captured-prompt)
-     (with-completing-read (lambda (prompt &rest _)
-                             (setq captured-prompt prompt)
-                             "")
-       (consult-jj-read-revision "jj new" "@"))
-     (should (string-match-p "jj new" captured-prompt))
-     (should (string-match-p "(default @)" captured-prompt)))))
+    (let (captured-prompt)
+      (with-completing-read (lambda (prompt &rest _)
+                              (setq captured-prompt prompt)
+                              "")
+        (consult-jj-read-revision "jj new" "@"))
+      (should (string-match-p "jj new" captured-prompt))
+      (should (string-match-p "(default @)" captured-prompt)))))
 
 (ert-deftest matching-candidate-overlay-receives-selected-face ()
   (with-temp-buffer
-   (let* ((overlay-a   (make-overlay (point-min) (point-max)))
-          (overlay-b   (make-overlay (point-min) (point-max)))
-          (candidates  `(("entry-a" . ,overlay-a)
-                         ("entry-b" . ,overlay-b))))
-     (consult-jj--read-revision-highlight-candidate "entry-a" candidates)
-     (should (eq (overlay-get overlay-a 'face)
-                 'consult-jj-selected-face))
-     (should-not (eq (overlay-get overlay-b 'face)
-                     'consult-jj-selected-face)))))
+    (let* ((overlay-a   (make-overlay (point-min) (point-max)))
+           (overlay-b   (make-overlay (point-min) (point-max)))
+           (candidates  `(("entry-a" . ,overlay-a)
+                          ("entry-b" . ,overlay-b))))
+      (consult-jj--read-revision-highlight-candidate "entry-a" candidates)
+      (should (eq (overlay-get overlay-a 'face)
+                  'consult-jj-selected-face))
+      (should-not (eq (overlay-get overlay-b 'face)
+                      'consult-jj-selected-face)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -195,50 +202,50 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest new-with-change-id-creates-change-on-top-of-it ()
   (with-test-repo
-   (let ((base (test-change-id-of "@")))
-     (consult-jj-new base)
-     (should (not (equal base (test-change-id-of "@"))))
-     (should (equal base (test-change-id-of "@-"))))))
+    (let ((base (test-change-id-of "@")))
+      (consult-jj-new base)
+      (should (not (equal base (test-change-id-of "@"))))
+      (should (equal base (test-change-id-of "@-"))))))
 
 (ert-deftest new-creates-empty-change ()
   (with-test-repo
-   (consult-jj-new "@")
-   (should (string-empty-p
-            (consult-jj--revision-description
-             (car (test-consult-jj-log-revisions)))))))
+    (consult-jj-new "@")
+    (should (string-empty-p
+             (consult-jj--revision-description
+              (car (test-consult-jj-log-revisions)))))))
 
 (ert-deftest new-with-bookmark-creates-change-on-top-of-bookmark ()
   (with-test-repo
-   (test-sh "jj bookmark set main")
-   (consult-jj-new "main")
-   (should (equal (test-change-id-of "main")
-                  (test-change-id-of "@-")))))
+    (test-sh "jj bookmark set main")
+    (consult-jj-new "main")
+    (should (equal (test-change-id-of "main")
+                   (test-change-id-of "@-")))))
 
 (ert-deftest new-without-rev-prompts-with-prefix-and-default-at ()
   (with-test-repo
-   (let ((called-with nil))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (prompt default)
-                  (setq called-with (list prompt default))
-                  "@")))
-       (consult-jj-new))
-     (should (equal called-with '("jj new" "@"))))))
+    (let ((called-with nil))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (prompt default)
+                   (setq called-with (list prompt default))
+                   "@")))
+        (consult-jj-new))
+      (should (equal called-with '("jj new" "@"))))))
 
 (ert-deftest new-without-rev-runs-new-on-prompted-rev ()
   (with-test-repo
-   (let ((base (test-change-id-of "@")))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (_prompt _default) base)))
-       (consult-jj-new))
-     (should (equal base (test-change-id-of "@-"))))))
+    (let ((base (test-change-id-of "@")))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (_prompt _default) base)))
+        (consult-jj-new))
+      (should (equal base (test-change-id-of "@-"))))))
 
 (ert-deftest new-displays-command-output ()
   (with-test-repo
-   (let* ((displayed nil)
-          (consult-jj--display-function
-           (lambda (msg) (setq displayed msg))))
-     (consult-jj-new "@")
-     (should (string-match-p "Working copy" displayed)))))
+    (let* ((displayed nil)
+           (consult-jj--display-function
+            (lambda (msg) (setq displayed msg))))
+      (consult-jj-new "@")
+      (should (string-match-p "Working copy" displayed)))))
 
 (ert-deftest new-outside-repo-signals-error ()
   (let ((default-directory "/tmp"))
@@ -246,7 +253,7 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest new-with-invalid-revision-signals-error ()
   (with-test-repo
-   (should-error (consult-jj-new "zzzznope") :type 'jj-error)))
+    (should-error (consult-jj-new "zzzznope") :type 'jj-error)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -255,46 +262,46 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest edit-with-change-id-moves-working-copy-to-it ()
   (with-test-repo
-   (test-sh "jj new")
-   (let ((base (test-change-id-of "@-")))
-     (consult-jj-edit base)
-     (should (equal base (test-change-id-of "@"))))))
+    (test-sh "jj new")
+    (let ((base (test-change-id-of "@-")))
+      (consult-jj-edit base)
+      (should (equal base (test-change-id-of "@"))))))
 
 (ert-deftest edit-with-bookmark-moves-working-copy-to-bookmark ()
   (with-test-repo
-   (test-sh "jj bookmark set main"
-            "jj new")
-   (consult-jj-edit "main")
-   (should (equal (test-change-id-of "@")
-                  (test-change-id-of "main")))))
+    (test-sh "jj bookmark set main"
+             "jj new")
+    (consult-jj-edit "main")
+    (should (equal (test-change-id-of "@")
+                   (test-change-id-of "main")))))
 
 (ert-deftest edit-without-rev-prompts-with-prefix-and-default-at ()
   (with-test-repo
-   (let ((called-with nil))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (prompt default)
-                  (setq called-with (list prompt default))
-                  "@")))
-       (consult-jj-edit))
-     (should (equal called-with '("jj edit" "@"))))))
+    (let ((called-with nil))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (prompt default)
+                   (setq called-with (list prompt default))
+                   "@")))
+        (consult-jj-edit))
+      (should (equal called-with '("jj edit" "@"))))))
 
 (ert-deftest edit-without-rev-runs-edit-on-prompted-rev ()
   (with-test-repo
-   (test-sh "jj new")
-   (let ((base (test-change-id-of "@-")))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (_prompt _default) base)))
-       (consult-jj-edit))
-     (should (equal base (test-change-id-of "@"))))))
+    (test-sh "jj new")
+    (let ((base (test-change-id-of "@-")))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (_prompt _default) base)))
+        (consult-jj-edit))
+      (should (equal base (test-change-id-of "@"))))))
 
 (ert-deftest edit-displays-command-output ()
   (with-test-repo
-   (test-sh "jj new")
-   (let* ((displayed nil)
-          (consult-jj--display-function
-           (lambda (msg) (setq displayed msg))))
-     (consult-jj-edit "@-")
-     (should (string-match-p "Working copy" displayed)))))
+    (test-sh "jj new")
+    (let* ((displayed nil)
+           (consult-jj--display-function
+            (lambda (msg) (setq displayed msg))))
+      (consult-jj-edit "@-")
+      (should (string-match-p "Working copy" displayed)))))
 
 (ert-deftest edit-outside-repo-signals-error ()
   (let ((default-directory "/tmp"))
@@ -302,7 +309,7 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest edit-with-invalid-revision-signals-error ()
   (with-test-repo
-   (should-error (consult-jj-edit "zzzznope") :type 'jj-error)))
+    (should-error (consult-jj-edit "zzzznope") :type 'jj-error)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -311,21 +318,21 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-at-without-rev-prompts-with-prefix-and-default-at ()
   (with-test-repo
-   (let ((called-with nil))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (prompt default)
-                  (setq called-with (list prompt default))
-                  "@"))
-               ((symbol-function 'consult-jj--start-process) #'ignore))
-       (consult-jj-diff-at))
-     (should (equal called-with '("jj diff at" "@"))))))
+    (let ((called-with nil))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (prompt default)
+                   (setq called-with (list prompt default))
+                   "@"))
+                ((symbol-function 'consult-jj--start-process) #'ignore))
+        (consult-jj-diff-at))
+      (should (equal called-with '("jj diff at" "@"))))))
 
 (ert-deftest diff-at-with-rev-does-not-prompt ()
   (with-test-repo
-   (cl-letf (((symbol-function 'consult-jj-read-revision)
-              (lambda (&rest _) (error "should not prompt")))
-             ((symbol-function 'consult-jj--start-process) #'ignore))
-     (should (consult-jj-diff-at "@")))))
+    (cl-letf (((symbol-function 'consult-jj-read-revision)
+               (lambda (&rest _) (error "should not prompt")))
+              ((symbol-function 'consult-jj--start-process) #'ignore))
+      (should (consult-jj-diff-at "@")))))
 
 (ert-deftest diff-at-returns-jj-diff-buffer ()
   (with-test-repo
@@ -335,28 +342,24 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-at-creates-a-new-buffer-each-time ()
   (with-test-repo
-   (let ((first (consult-jj-diff-at "@")))
-     (unwind-protect
-         (test-wait-for-process first)
-       (when (buffer-live-p first)
-         (kill-buffer first)))
-     (let ((second (consult-jj-diff-at "@")))
-       (unwind-protect
-           (progn
-             (test-wait-for-process second)
-             (should-not (eq first second)))
-         (when (buffer-live-p second)
-           (kill-buffer second)))))))
+    (let ((repo-buffer (current-buffer))
+          (first (consult-jj-diff-at "@")))
+      (test-wait-for-process first)
+      (kill-buffer first)
+      (with-current-buffer repo-buffer
+        (as-temp-buffer (consult-jj-diff-at "@")
+          (test-wait-for-process (current-buffer))
+          (should-not (eq first (current-buffer))))))))
 
 (ert-deftest diff-at-shows-only-requested-revision ()
   (with-test-repo
-   (test-write-file "a.txt" "one\n")
-   (test-sh "jj new")
-   (test-write-file "b.txt" "two\n")
-   (test-sh "jj new")
-   (test-write-file "c.txt" "three\n")
-   (as-temp-buffer (consult-jj-diff-at "@-")
-     (test-wait-for-process (current-buffer))
+    (test-write-file "a.txt" "one\n")
+    (test-sh "jj new")
+    (test-write-file "b.txt" "two\n")
+    (test-sh "jj new")
+    (test-write-file "c.txt" "three\n")
+    (as-temp-buffer (consult-jj-diff-at "@-")
+      (test-wait-for-process (current-buffer))
       (should (string= (buffer-string)
                        (concat (test-sh "jj diff -r @- --git")
                                "\n"))))))
@@ -395,22 +398,22 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-at-on-clean-repo-shows-empty-diff ()
   (with-test-repo
-   (let ((buffer (consult-jj-diff-at "@")))
-     (unwind-protect
-         (progn
-           (test-wait-for-process buffer)
-           (with-current-buffer buffer
-             (should (string-empty-p (buffer-string)))))
-       (when (buffer-live-p buffer)
-         (kill-buffer buffer))))))
+    (let ((buffer (consult-jj-diff-at "@")))
+      (unwind-protect
+          (progn
+            (test-wait-for-process buffer)
+            (with-current-buffer buffer
+              (should (string-empty-p (buffer-string)))))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
 
 (ert-deftest populated-diff-buffer-finalize-enables-diff-mode-read-only-at-point-min ()
   (with-temp-buffer
-   (insert "diff --git a/a.txt b/a.txt\n")
-   (consult-jj-diff--finalize)
-   (should (derived-mode-p 'diff-mode))
-   (should buffer-read-only)
-   (should (= (point) (point-min)))))
+    (insert "diff --git a/a.txt b/a.txt\n")
+    (consult-jj-diff--finalize)
+    (should (derived-mode-p 'diff-mode))
+    (should buffer-read-only)
+    (should (= (point) (point-min)))))
 
 (ert-deftest diff-at-outside-repo-signals-error ()
   (let ((default-directory "/tmp"))
@@ -423,23 +426,188 @@ assert on the asynchronously generated buffer contents."
       (should (string-match-p "Error" (buffer-string)))
       (should (derived-mode-p 'diff-mode)))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Describe
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(ert-deftest describe-without-rev-prompts-with-prefix-and-default-at ()
+  (with-test-repo
+    (let ((called-with nil)
+          (buffer nil))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (prompt default)
+                   (setq called-with (list prompt default))
+                   "@")))
+        (setq buffer (consult-jj-describe)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (should (equal called-with '("jj describe" "@"))))))
+
+(ert-deftest describe-with-rev-does-not-prompt ()
+  (with-test-repo
+    (cl-letf (((symbol-function 'consult-jj-read-revision)
+               (lambda (&rest _) (error "should not prompt"))))
+      (as-temp-buffer (consult-jj-describe "@")
+        (should (derived-mode-p 'consult-jj-describe-mode))))))
+
+(ert-deftest describe-buffer-default-directory-is-repo-root ()
+  (with-test-repo
+    (let ((root default-directory))
+      (as-temp-buffer (consult-jj-describe "@")
+        (should (string= default-directory root))))))
+
+(ert-deftest describe-buffer-is-in-consult-jj-describe-mode ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (should (derived-mode-p 'consult-jj-describe-mode))
+      (should (derived-mode-p 'markdown-mode)))))
+
+(ert-deftest describe-buffer-records-revision ()
+  (with-test-repo
+    (let ((change-id (test-change-id-of "@")))
+      (as-temp-buffer (consult-jj-describe change-id)
+        (should (string= consult-jj--describe-revision change-id))))))
+
+(ert-deftest describe-buffer-header-line-shows-help-text ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (let ((header (substitute-command-keys header-line-format)))
+        (should (string-match-p "Accept" header))
+        (should (string-match-p "Reject" header))
+        (should (string-match-p "Diff" header))))))
+
+(ert-deftest describe-buffer-contains-revision-description ()
+  (with-test-repo
+    (test-sh "jj describe -r @ -m 'Hello world'")
+    (as-temp-buffer (consult-jj-describe "@")
+      (should (string-match-p "Hello world" (buffer-string))))))
+
+(ert-deftest describe-buffer-for-fresh-change-has-empty-description ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (should (string-prefix-p "\nJJ:" (buffer-string))))))
+
+(ert-deftest describe-buffer-contains-jj-change-id-comment ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (should (string-match-p "JJ: Change ID:" (buffer-string))))))
+
+(ert-deftest describe-creates-a-new-buffer-each-time ()
+  (with-test-repo
+    (let ((repo-buffer (current-buffer))
+          (first (consult-jj-describe "@")))
+      (kill-buffer first)
+      (with-current-buffer repo-buffer
+        (as-temp-buffer (consult-jj-describe "@")
+          (should-not (eq first (current-buffer))))))))
+
+(ert-deftest describe-outside-repo-signals-error ()
+  (let ((default-directory "/tmp"))
+    (should-error (consult-jj-describe "@") :type 'jj-error)))
+
+(ert-deftest describe-accept-strips-jj-comment-lines-before-sending ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (let ((sent nil))
+        (goto-char (point-max))
+        (insert "my new description\n")
+        (cl-letf (((symbol-function 'call-process-region)
+                   (lambda (start end &rest _)
+                     (setq sent (buffer-substring-no-properties start end))
+                     0)))
+          (consult-jj-describe-accept))
+        (should (string= sent "my new description"))
+        (should-not (string-match-p "^JJ:" sent))))))
+
+(ert-deftest describe-accept-strips-leading-and-trailing-blank-lines ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (let ((sent nil))
+        (goto-char (point-max))
+        (insert "\n\nmy description\n\n\n")
+        (cl-letf (((symbol-function 'call-process-region)
+                   (lambda (start end &rest _)
+                     (setq sent (buffer-substring-no-properties start end))
+                     0)))
+          (consult-jj-describe-accept))
+        (should (string= sent "my description"))))))
+
+(ert-deftest describe-accept-updates-revision-description-in-repo ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (goto-char (point-max))
+      (insert "new description text\n")
+      (consult-jj-describe-accept))
+    (should (string= (test-sh "jj log --no-graph -r @ -T description")
+                     "new description text"))))
+
+(ert-deftest describe-accept-kills-buffer ()
+  (with-test-repo
+    (let ((buffer (consult-jj-describe "@")))
+      (with-current-buffer buffer
+        (consult-jj-describe-accept))
+      (should-not (buffer-live-p buffer)))))
+
+(ert-deftest describe-accept-displays-description-updated-message ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "@")
+      (let ((displayed nil))
+        (let ((consult-jj--display-function
+               (lambda (msg) (setq displayed msg))))
+          (consult-jj-describe-accept))
+        (should (string-match-p "Description updated" displayed))))))
+
+(ert-deftest describe-reject-does-not-change-description ()
+  (with-test-repo
+    (test-sh "jj describe -r @ -m 'original description'")
+    (let (buffer)
+      (as-temp-buffer (setq buffer (consult-jj-describe "@"))
+        (goto-char (point-max))
+        (insert "changed description\n")
+        (consult-jj-describe-reject)
+        (should-not (buffer-live-p buffer)))
+      (should (string= (test-sh "jj log --no-graph -r @ -T description")
+                       "original description")))))
+
+(ert-deftest describe-diff-shows-diff-for-described-revision ()
+  (with-test-repo
+    (let ((change-id (test-change-id-of "@")))
+      (as-temp-buffer (consult-jj-describe change-id)
+        (let ((diffed nil))
+          (cl-letf (((symbol-function 'consult-jj-diff-at)
+                     (lambda (rev) (setq diffed rev))))
+            (consult-jj-describe-diff))
+          (should (string= diffed change-id)))))))
+
+(ert-deftest describe-diff-signals-error-outside-describe-buffer ()
+  (with-test-repo
+    (with-temp-buffer
+      (should-error (consult-jj-describe-diff) :type 'user-error))))
+
+(ert-deftest describe-diff-signals-error-when-revision-is-nil ()
+  (with-test-repo
+    (with-temp-buffer
+      (consult-jj-describe-mode)
+      (should-error (consult-jj-describe-diff) :type 'user-error))))
+
 (ert-deftest diff-from-without-rev-prompts-with-prefix-and-default-at-minus ()
   (with-test-repo
-   (let ((called-with nil))
-     (cl-letf (((symbol-function 'consult-jj-read-revision)
-                (lambda (prompt default)
-                  (setq called-with (list prompt default))
-                  "@"))
-               ((symbol-function 'consult-jj--start-process) #'ignore))
-       (consult-jj-diff-from))
-     (should (equal called-with '("jj diff from" "@-"))))))
+    (let ((called-with nil))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (prompt default)
+                   (setq called-with (list prompt default))
+                   "@"))
+                ((symbol-function 'consult-jj--start-process) #'ignore))
+        (consult-jj-diff-from))
+      (should (equal called-with '("jj diff from" "@-"))))))
 
 (ert-deftest diff-from-with-rev-does-not-prompt ()
   (with-test-repo
-   (cl-letf (((symbol-function 'consult-jj-read-revision)
-              (lambda (&rest _) (error "should not prompt")))
-             ((symbol-function 'consult-jj--start-process) #'ignore))
-     (should (consult-jj-diff-from "@")))))
+    (cl-letf (((symbol-function 'consult-jj-read-revision)
+               (lambda (&rest _) (error "should not prompt")))
+              ((symbol-function 'consult-jj--start-process) #'ignore))
+      (should (consult-jj-diff-from "@")))))
 
 (ert-deftest diff-from-returns-jj-diff-buffer ()
   (with-test-repo
@@ -449,18 +617,14 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-from-creates-a-new-buffer-each-time ()
   (with-test-repo
-   (let ((first (consult-jj-diff-from "@")))
-     (unwind-protect
-         (test-wait-for-process first)
-       (when (buffer-live-p first)
-         (kill-buffer first)))
-     (let ((second (consult-jj-diff-from "@")))
-       (unwind-protect
-           (progn
-             (test-wait-for-process second)
-             (should-not (eq first second)))
-         (when (buffer-live-p second)
-           (kill-buffer second)))))))
+    (let ((repo-buffer (current-buffer))
+          (first       (consult-jj-diff-from "@")))
+      (test-wait-for-process first)
+      (kill-buffer first)
+      (with-current-buffer repo-buffer
+        (as-temp-buffer (consult-jj-diff-from "@")
+          (test-wait-for-process (current-buffer))
+          (should-not (eq first (current-buffer))))))))
 
 (ert-deftest diff-from-starts-asynchronous-process-running-diff-git-from-revision ()
   (with-test-repo
@@ -478,25 +642,25 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-from-on-clean-repo-shows-empty-diff ()
   (with-test-repo
-   (let ((buffer (consult-jj-diff-from "@")))
-     (unwind-protect
-         (progn
-           (test-wait-for-process buffer)
-           (with-current-buffer buffer
-             (should (string-empty-p (buffer-string)))))
-       (when (buffer-live-p buffer)
-         (kill-buffer buffer))))))
+    (let ((buffer (consult-jj-diff-from "@")))
+      (unwind-protect
+          (progn
+            (test-wait-for-process buffer)
+            (with-current-buffer buffer
+              (should (string-empty-p (buffer-string)))))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
 
 (ert-deftest diff-from-shows-changes-from-revision-to-working-copy ()
   (with-test-repo
-   (test-write-file "a.txt" "one\n")
-   (test-sh "jj new")
-   (test-write-file "b.txt" "two\n")
-   (as-temp-buffer (consult-jj-diff-from "@-")
-     (test-wait-for-process (current-buffer))
-     (should (string= (buffer-string)
-                      (concat (test-sh "jj diff --git --from @-")
-                              "\n"))))))
+    (test-write-file "a.txt" "one\n")
+    (test-sh "jj new")
+    (test-write-file "b.txt" "two\n")
+    (as-temp-buffer (consult-jj-diff-from "@-")
+      (test-wait-for-process (current-buffer))
+      (should (string= (buffer-string)
+                       (concat (test-sh "jj diff --git --from @-")
+                               "\n"))))))
 
 (ert-deftest diff-from-pops-to-jj-diff-buffer ()
   (with-test-repo

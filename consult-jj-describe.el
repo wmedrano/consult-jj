@@ -117,7 +117,7 @@ Sends the buffer to `jj describe --stdin' for the revision in
                (insert-file-contents error-file)
                (buffer-string)))))
       (delete-file error-file)))
-  (display-message-or-buffer "Description updated")
+  (funcall consult-jj--display-function "Description updated")
   (kill-buffer))
 
 (defun consult-jj-describe-reject ()
