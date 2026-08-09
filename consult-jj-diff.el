@@ -35,14 +35,9 @@ diff is generated asynchronously and displayed with `diff-mode'."
   (interactive)
   (let* ((rev    (or rev (consult-jj-read-revision "jj diff at" "@")))
          (buffer (consult-jj--with-new-buffer "*jj-diff*"
-                   (consult-jj-diff-at--start rev))))
+                   (consult-jj--diff-run `("-r" ,rev)))))
     (pop-to-buffer buffer)
     buffer))
-
-(defun consult-jj-diff-at--start (rev)
-  "Start generating the diff at revision REV."
-  (consult-jj--start-process `("diff" "--git" "-r" ,rev)
-                             :on-done #'consult-jj-diff--finalize))
 
 ;;;###autoload
 (defun consult-jj-diff-from (&optional from-rev)
@@ -54,16 +49,18 @@ displayed with `diff-mode'."
   (interactive)
   (let* ((from-rev (or from-rev (consult-jj-read-revision "jj diff from" "@-")))
          (buffer   (consult-jj--with-new-buffer "*jj-diff*"
-                     (consult-jj-diff-from--start from-rev))))
+                     (consult-jj--diff-run `("--from" ,from-rev)))))
     (pop-to-buffer buffer)
     buffer))
 
-(defun consult-jj-diff-from--start (from-rev)
-  "Start generating the diff from FROM-REV."
-  (consult-jj--start-process `("diff" "--git" "--from" ,from-rev)
-                             :on-done #'consult-jj-diff--finalize))
+(defun consult-jj--diff-run (args)
+  "Run jj diff on the current buffer with ARGS."
+  (consult-jj--start-process
+   (append '("diff" "--git")
+           args)
+   :on-done #'consult-jj--diff-finalize))
 
-(defun consult-jj-diff--finalize ()
+(defun consult-jj--diff-finalize ()
   "Finalize the diff buffer by enabling `diff-mode' and `read-only-mode'."
   (goto-char (point-min))
   (diff-mode)

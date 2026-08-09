@@ -88,29 +88,34 @@ its return value is used as the completion result."
 
 (defun test-consult-jj-log-revisions ()
   "Return the revisions for the current repo."
-  (let ((buffer (consult-jj--log)))
-    (unwind-protect
-        (with-current-buffer buffer
-          (cl-loop for overlay in (overlays-in (point-min) (point-max))
-                   for revision = (overlay-get overlay 'consult-jj--revision)
-                   when revision
-                   collect revision))
-      (when (buffer-live-p buffer)
-        (kill-buffer buffer)))))
+  (as-temp-buffer (consult-jj--log)
+    (cl-loop for overlay in (overlays-in (point-min) (point-max))
+             for revision = (overlay-get overlay 'consult-jj--revision)
+             when revision
+             collect revision)))
 
 (defun test-change-id-of (rev)
   "Return the change id of REV, with surrounding JSON quotes stripped."
   (test-sh (list "jj" "log" "--no-graph" "-r" rev
                  "-T" "change_id")))
 
-(defun test-wait-for-process (buffer)
+(defun test-wait-for-process (&optional buffer)
   "Wait for the `jj' process running in BUFFER to finish.
 
-Polls every 0.1 seconds until the process exits, so that tests can
-assert on the asynchronously generated buffer contents."
-  (let ((proc (get-buffer-process buffer)))
-    (while (and proc (process-live-p proc))
-      (sleep-for 0.1))))
+Polls every until the process exits, so that tests can assert on the
+asynchronously generated buffer contents.  Signals an error if the process does
+not exit in time."
+  (let* ((buffer         (or buffer (current-buffer)))
+         (proc           (get-buffer-process buffer))
+         (sleep-duration 0.1)
+         (timeout        10)
+         (remaining      (ceiling (/ timeout sleep-duration))))
+    (while (and proc (process-live-p proc) (> remaining 0))
+      (sleep-for sleep-duration)
+      (setq remaining (1- remaining)))
+    (when (and proc (process-live-p proc))
+      (error "Process %S did not finish within %s seconds"
+             proc timeout))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -187,17 +192,20 @@ assert on the asynchronously generated buffer contents."
       (should (string-match-p "jj new" captured-prompt))
       (should (string-match-p "(default @)" captured-prompt)))))
 
-(ert-deftest matching-candidate-overlay-receives-selected-face ()
-  (with-temp-buffer
-    (let* ((overlay-a   (make-overlay (point-min) (point-max)))
-           (overlay-b   (make-overlay (point-min) (point-max)))
-           (candidates  `(("entry-a" . ,overlay-a)
-                          ("entry-b" . ,overlay-b))))
-      (consult-jj--read-revision-highlight-candidate "entry-a" candidates)
-      (should (eq (overlay-get overlay-a 'face)
-                  'consult-jj-selected-face))
-      (should-not (eq (overlay-get overlay-b 'face)
-                      'consult-jj-selected-face)))))
+(ert-deftest first-revision-is-selected ()
+  (with-test-repo
+    (test-sh "jj new")
+    (with-completing-read
+        (lambda (_prompt table &rest _)
+          (let* ((first  (car table))
+                 (second (cadr table)))
+            (should (= (length table) 3))
+            (should (eq (overlay-get (cdr first) 'face)
+                        'consult-jj-selected-face))
+            (should-not (eq (overlay-get (cdr second) 'face)
+                            'consult-jj-selected-face))
+            (car first)))
+      (consult-jj-read-revision "jj new" "@"))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -363,7 +371,7 @@ assert on the asynchronously generated buffer contents."
 (ert-deftest diff-at-returns-jj-diff-buffer ()
   (with-test-repo
     (as-temp-buffer (consult-jj-diff-at "@")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string-prefix-p "*jj-diff*" (buffer-name (current-buffer)))))))
 
 (ert-deftest diff-at-creates-a-new-buffer-each-time ()
@@ -373,7 +381,7 @@ assert on the asynchronously generated buffer contents."
       (kill-buffer first)
       (with-current-buffer test-repo-buffer
         (as-temp-buffer (consult-jj-diff-at "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should-not (eq first (current-buffer))))))))
 
 (ert-deftest diff-at-shows-only-requested-revision ()
@@ -384,7 +392,7 @@ assert on the asynchronously generated buffer contents."
     (test-sh "jj new")
     (test-write-file "c.txt" "three\n")
     (as-temp-buffer (consult-jj-diff-at "@-")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string= (buffer-string)
                        (concat (test-sh "jj diff -r @- --git")
                                "\n"))))))
@@ -395,7 +403,7 @@ assert on the asynchronously generated buffer contents."
       (test-write-file "foo/bar.txt" "content\n")
       (as-temp-buffer (find-file "foo/bar.txt")
         (as-temp-buffer (consult-jj-diff-at "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should (string= default-directory root)))))))
 
 (ert-deftest diff-at-pops-to-jj-diff-buffer ()
@@ -404,7 +412,7 @@ assert on the asynchronously generated buffer contents."
       (cl-letf (((symbol-function 'pop-to-buffer)
                  (lambda (buffer &rest _) (setq popped buffer))))
         (as-temp-buffer (consult-jj-diff-at "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should (eq popped (current-buffer))))))))
 
 (ert-deftest diff-at-starts-asynchronous-process-running-diff-git-for-revision ()
@@ -412,7 +420,7 @@ assert on the asynchronously generated buffer contents."
     (as-temp-buffer (consult-jj-diff-at "abc123")
       (let ((proc (get-buffer-process (current-buffer))))
         (should (process-live-p proc))
-        (test-wait-for-process (current-buffer))
+        (test-wait-for-process)
         (should (equal (process-command proc)
                        '("jj"
                          "--color" "never"
@@ -423,22 +431,20 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-at-on-clean-repo-shows-empty-diff ()
   (with-test-repo
-    (let ((buffer (consult-jj-diff-at "@")))
-      (unwind-protect
-          (progn
-            (test-wait-for-process buffer)
-            (with-current-buffer buffer
-              (should (string-empty-p (buffer-string)))))
-        (when (buffer-live-p buffer)
-          (kill-buffer buffer))))))
+    (as-temp-buffer (consult-jj-diff-at "@")
+      (test-wait-for-process)
+      (should (string-empty-p (buffer-string))))))
 
 (ert-deftest populated-diff-buffer-finalize-enables-diff-mode-read-only-at-point-min ()
-  (with-temp-buffer
-    (insert "diff --git a/a.txt b/a.txt\n")
-    (consult-jj-diff--finalize)
-    (should (derived-mode-p 'diff-mode))
-    (should buffer-read-only)
-    (should (= (point) (point-min)))))
+  (with-test-repo
+    (test-write-file "a.txt" "one\n")
+    (test-sh "jj new")
+    (test-write-file "b.txt" "two\n")
+    (as-temp-buffer (consult-jj-diff-at "@-")
+      (test-wait-for-process)
+      (should (derived-mode-p 'diff-mode))
+      (should buffer-read-only)
+      (should (= (point) (point-min))))))
 
 (ert-deftest diff-at-outside-repo-signals-error ()
   (let ((default-directory "/tmp"))
@@ -447,7 +453,7 @@ assert on the asynchronously generated buffer contents."
 (ert-deftest diff-at-with-invalid-revision-shows-error-output-in-buffer ()
   (with-test-repo
     (as-temp-buffer (consult-jj-diff-at "zzzznope")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string-match-p "Error" (buffer-string)))
       (should (derived-mode-p 'diff-mode)))))
 
@@ -465,8 +471,7 @@ assert on the asynchronously generated buffer contents."
                    (setq called-with (list prompt default))
                    "@")))
         (setq buffer (consult-jj-describe)))
-      (when (buffer-live-p buffer)
-        (kill-buffer buffer))
+      (when (buffer-live-p buffer) (kill-buffer buffer))
       (should (equal called-with '("jj describe" "@"))))))
 
 (ert-deftest describe-with-rev-does-not-prompt ()
@@ -511,12 +516,18 @@ assert on the asynchronously generated buffer contents."
 (ert-deftest describe-buffer-for-fresh-change-has-empty-description ()
   (with-test-repo
     (as-temp-buffer (consult-jj-describe "@")
-      (should (string-prefix-p "\nJJ:" (buffer-string))))))
+      (should (string-prefix-p "\n\nJJ:" (buffer-string))))))
 
 (ert-deftest describe-buffer-contains-jj-change-id-comment ()
   (with-test-repo
     (as-temp-buffer (consult-jj-describe "@")
       (should (string-match-p "JJ: Change ID:" (buffer-string))))))
+
+(ert-deftest describe-buffer-point-at-top ()
+  (with-test-repo
+    (test-sh "jj describe -r @ -m 'Hello world'")
+    (as-temp-buffer (consult-jj-describe "@")
+      (should (= (point) (point-min))))))
 
 (ert-deftest describe-creates-a-new-buffer-each-time ()
   (with-test-repo
@@ -636,7 +647,7 @@ assert on the asynchronously generated buffer contents."
 (ert-deftest diff-from-returns-jj-diff-buffer ()
   (with-test-repo
     (as-temp-buffer (consult-jj-diff-from "@")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string-prefix-p "*jj-diff*" (buffer-name (current-buffer)))))))
 
 (ert-deftest diff-from-creates-a-new-buffer-each-time ()
@@ -646,7 +657,7 @@ assert on the asynchronously generated buffer contents."
       (kill-buffer first)
       (with-current-buffer test-repo-buffer
         (as-temp-buffer (consult-jj-diff-from "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should-not (eq first (current-buffer))))))))
 
 (ert-deftest diff-from-starts-asynchronous-process-running-diff-git-from-revision ()
@@ -654,7 +665,7 @@ assert on the asynchronously generated buffer contents."
     (as-temp-buffer (consult-jj-diff-from "abc123")
       (let ((proc (get-buffer-process (current-buffer))))
         (should (process-live-p proc))
-        (test-wait-for-process (current-buffer))
+        (test-wait-for-process)
         (should (equal (process-command proc)
                        '("jj"
                          "--color" "never"
@@ -665,14 +676,9 @@ assert on the asynchronously generated buffer contents."
 
 (ert-deftest diff-from-on-clean-repo-shows-empty-diff ()
   (with-test-repo
-    (let ((buffer (consult-jj-diff-from "@")))
-      (unwind-protect
-          (progn
-            (test-wait-for-process buffer)
-            (with-current-buffer buffer
-              (should (string-empty-p (buffer-string)))))
-        (when (buffer-live-p buffer)
-          (kill-buffer buffer))))))
+    (as-temp-buffer (consult-jj-diff-from "@")
+      (test-wait-for-process)
+      (should (string-empty-p (buffer-string))))))
 
 (ert-deftest diff-from-shows-changes-from-revision-to-working-copy ()
   (with-test-repo
@@ -680,7 +686,7 @@ assert on the asynchronously generated buffer contents."
     (test-sh "jj new")
     (test-write-file "b.txt" "two\n")
     (as-temp-buffer (consult-jj-diff-from "@-")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string= (buffer-string)
                        (concat (test-sh "jj diff --git --from @-")
                                "\n"))))))
@@ -691,7 +697,7 @@ assert on the asynchronously generated buffer contents."
       (cl-letf (((symbol-function 'pop-to-buffer)
                  (lambda (buffer &rest _) (setq popped buffer))))
         (as-temp-buffer (consult-jj-diff-from "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should (eq popped (current-buffer))))))))
 
 (ert-deftest diff-from-sets-default-directory-to-repo-root ()
@@ -700,7 +706,7 @@ assert on the asynchronously generated buffer contents."
       (test-write-file "foo/bar.txt" "content\n")
       (as-temp-buffer (find-file "foo/bar.txt")
         (as-temp-buffer (consult-jj-diff-from "@")
-          (test-wait-for-process (current-buffer))
+          (test-wait-for-process)
           (should (string= default-directory root)))))))
 
 (ert-deftest diff-from-outside-repo-signals-error ()
@@ -710,6 +716,6 @@ assert on the asynchronously generated buffer contents."
 (ert-deftest diff-from-with-invalid-revision-shows-error-output-in-buffer ()
   (with-test-repo
     (as-temp-buffer (consult-jj-diff-from "zzzznope")
-      (test-wait-for-process (current-buffer))
+      (test-wait-for-process)
       (should (string-match-p "Error" (buffer-string)))
       (should (derived-mode-p 'diff-mode)))))

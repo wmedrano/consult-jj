@@ -62,8 +62,7 @@
   "Face for \"(no description set)\" in the jj log."
   :group 'consult-jj)
 
-(put 'jj-error 'error-conditions '(jj-error error))
-(put 'jj-error 'error-message "JJ error")
+(define-error 'jj-error "JJ error")
 
 (defun consult-jj--signal (message)
   "Signal a `jj-error' with the failure MESSAGE from a `jj' command.
@@ -113,14 +112,16 @@ current jj repository.  Returns the buffer."
 (cl-defun consult-jj--start-process (args &key on-done)
   "Start a `jj' process with ARGS.
 
-COLOR is passed to the `--color' flag; it defaults to \"never\".
+The process is started with `--color never' and `--no-pager'.
 ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
          (final-args (append '("--color" "never" "--no-pager")
                              args))
          (sentinel   (if on-done (lambda (proc _event)
-                                   (with-current-buffer (process-buffer proc)
-                                     (funcall on-done)))))
+                                   (when (and (eq (process-status proc) 'exit)
+                                              (buffer-live-p (process-buffer proc)))
+                                     (with-current-buffer (process-buffer proc)
+                                       (funcall on-done))))))
          (proc (apply #'start-process (format "jj-%s" command)
                       (current-buffer)
                       consult-jj-executable
@@ -260,8 +261,9 @@ change id (trimmed to 8 characters), description, and bookmarks."
     (cl-loop for overlay in (overlays-in (point-min) (point-max))
              for revision = (overlay-get overlay 'consult-jj--revision)
              when revision
-             collect (let* ((change-id       (propertize (substring (consult-jj--revision-change-id revision) 0 8)
-                                                         'face 'consult-jj-change-id-face))
+             collect (let* ((change-id       (let ((id (consult-jj--revision-change-id revision)))
+                                               (propertize (substring id 0 (min 8 (length id)))
+                                                           'face 'consult-jj-change-id-face)))
                             (raw-description (consult-jj--revision-description revision))
                             (description     (if (string-empty-p raw-description)
                                                  (propertize "(no description set)" 'face 'consult-jj-no-description-face)
