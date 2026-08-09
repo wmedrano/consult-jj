@@ -215,18 +215,18 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
      (should (string-match-p
               (rx bol (repeat 8 (any alnum)) (0+ " " (1+ (not (any "\n")))) eol)
               (car commit)))
-     ;; the change id is styled with consult-jj-change-id
+     ;; the change id is styled with consult-jj-change-id-face
      (should (eq (get-text-property 0 'face (car commit))
-                 'consult-jj-change-id))
-     ;; the bookmarks are styled with consult-jj-bookmark
+                 'consult-jj-change-id-face))
+     ;; the bookmarks are styled with consult-jj-bookmark-face
      (let ((bookmark-pos (string-search "mybookmark" (car commit))))
        (should bookmark-pos)
        (should (eq (get-text-property bookmark-pos 'face (car commit))
-                   'consult-jj-bookmark))))))
+                   'consult-jj-bookmark-face))))))
 
 (ert-deftest consult-jj--read-revision-highlight-candidate ()
   ;; when the candidate matches a log entry,
-  ;; then that entry's overlay is given the consult-jj-selected face and
+  ;; then that entry's overlay is given the consult-jj-selected-face face and
   ;; the other entries' overlays are cleared
   (with-temp-buffer
     (let* ((overlay-a   (make-overlay 1 1))
@@ -234,7 +234,7 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
            (candidates  (list (cons "aaa111 first" overlay-a)
                               (cons "bbb222 second" overlay-b))))
       (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
-      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected))
+      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected-face))
       (should-not (overlay-get overlay-b 'face))))
 
   ;; when the selection moves to a different candidate,
@@ -248,7 +248,7 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
       (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
       (consult-jj--read-revision-highlight-candidate "bbb222 second" candidates)
       (should-not (overlay-get overlay-a 'face))
-      (should (eq (overlay-get overlay-b 'face) 'consult-jj-selected))))
+      (should (eq (overlay-get overlay-b 'face) 'consult-jj-selected-face))))
 
   ;; when the candidate is nil,
   ;; then no overlay receives a face
@@ -274,7 +274,7 @@ Runs jj in DIRECTORY, or in `default-directory' if DIRECTORY is nil."
                               (cons "bbb222 second" overlay-b))))
       (consult-jj--read-revision-highlight-candidate "aaa111 first" candidates)
       (consult-jj--read-revision-highlight-candidate "zzz custom text" candidates)
-      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected))
+      (should (eq (overlay-get overlay-a 'face) 'consult-jj-selected-face))
       (should-not (overlay-get overlay-b 'face))))
 
   ;; when there are no candidates,

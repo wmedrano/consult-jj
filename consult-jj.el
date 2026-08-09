@@ -24,19 +24,44 @@
   :type 'string
   :group 'consult-jj)
 
-(defface consult-jj-bookmark
+(defface consult-jj-bookmark-face
   '((t :inherit font-lock-type-face))
   "Face for bookmarks in the jj log."
   :group 'consult-jj)
 
-(defface consult-jj-change-id
+(defface consult-jj-change-id-face
   '((t :inherit font-lock-constant-face))
   "Face for change ids in the jj log."
   :group 'consult-jj)
 
-(defface consult-jj-selected
+(defface consult-jj-selected-face
   '((t :inherit highlight))
   "Face for the currently selected revision in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-graph-face
+  '((t :inherit font-lock-keyword-face))
+  "Face for graph line characters in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-email-face
+  '((t :inherit font-lock-string-face))
+  "Face for email addresses in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-timestamp-face
+  '((t :inherit font-lock-type-face))
+  "Face for timestamps in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-commit-id-face
+  '((t :inherit font-lock-comment-face))
+  "Face for commit ids in the jj log."
+  :group 'consult-jj)
+
+(defface consult-jj-no-description-face
+  '((t :inherit font-lock-comment-face))
+  "Face for \"(no description set)\" in the jj log."
   :group 'consult-jj)
 
 (put 'jj-error 'error-conditions '(jj-error error))
@@ -130,8 +155,9 @@ DEFAULT-REVISION is offered as the default."
          (candidates    (consult-jj--log-candidates jj-log-buffer))
          ;; The candidates are already sorted by `jj log' output.
          (vertico-sort-function nil))
-    (consult-jj--read-revision-highlight-candidate (caar candidates)
-                                                   candidates)
+    (when (string= default-revision "@")
+      (consult-jj--read-revision-highlight-candidate (caar candidates)
+                                                     candidates))
     (unwind-protect
         (let ((rev (minibuffer-with-setup-hook
                        (lambda ()
@@ -142,11 +168,9 @@ DEFAULT-REVISION is offered as the default."
                                         (vertico--candidate)
                                         candidates)))
                                    nil t))
-                     (completing-read (format "%s revision (default %s): "
-                                              prompt-prefix
-                                              default-revision)
-                                      candidates
-                                      nil nil ""))))
+                     (completing-read
+                      (format "%s revision (default %s): " prompt-prefix default-revision)
+                      candidates))))
           (cond
            ;; Empty -> Default
            ((string-empty-p rev) default-revision)
@@ -170,7 +194,7 @@ is not in CANDIDATES, the highlight is left unchanged."
     (dolist (entry candidates)
       (overlay-put (cdr entry) 'face
                    (when (eq (cdr entry) overlay)
-                     'consult-jj-selected)))))
+                     'consult-jj-selected-face)))))
 
 
 (defconst consult-jj--revision-fields
@@ -187,6 +211,17 @@ is not in CANDIDATES, the highlight is left unchanged."
   commit-id
   description
   bookmarks)
+
+(define-derived-mode consult-jj--log-mode special-mode "jj-log"
+  "Major mode for displaying `jj log' output."
+  (setq-local font-lock-defaults
+              '((("^\\([ @◆○×│~├─╮╯╰╭┤┬┴┼]+\\)" 1 'consult-jj-graph-face)
+                 ("^[ @◆○×│~├─╮╯╰╭┤┬┴┼]+\\s-+\\([a-z]+\\)\\b" 1 'consult-jj-change-id-face)
+                 ("\\b\\([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]\\{2,\\}\\)\\b" 1 'consult-jj-email-face)
+                 ("\\b\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [0-9]\\{2\\}:[0-9]\\{2\\}:[0-9]\\{2\\}\\)\\b" 1 'consult-jj-timestamp-face)
+                 ("\\b\\([0-9a-f]\\{8,\\}\\)$" 1 'consult-jj-commit-id-face)
+                 ("\\b[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [0-9]\\{2\\}:[0-9]\\{2\\}:[0-9]\\{2\\}\\s-+\\(.+?\\)\\s-+[0-9a-f]\\{8,\\}$" 1 'consult-jj-bookmark-face)
+                 ("(no description set)" 0 'consult-jj-no-description-face)))))
 
 (defun consult-jj--log ()
   "Show the `jj log' output in a \"*jj-log*\" buffer.
@@ -219,7 +254,7 @@ The log is generated synchronously.  Returns the log buffer."
         (overlay-put (make-overlay start (point))
                      'consult-jj--revision
                      revision))))
-  (read-only-mode t))
+  (consult-jj--log-mode))
 
 (defun consult-jj--log-candidates (buffer)
   "Return an alist of candidate text to overlay for BUFFER.
@@ -231,13 +266,13 @@ change id (trimmed to 8 characters), description, and bookmarks."
              for revision = (overlay-get overlay 'consult-jj--revision)
              when revision
              collect (let* ((change-id       (propertize (substring (consult-jj--revision-change-id revision) 0 8)
-                                                         'face 'consult-jj-change-id))
+                                                         'face 'consult-jj-change-id-face))
                             (raw-description (consult-jj--revision-description revision))
                             (description     (if (string-empty-p raw-description)
-                                                 (propertize "(no description set)" 'face 'font-lock-comment-face)
+                                                 (propertize "(no description set)" 'face 'consult-jj-no-description-face)
                                                raw-description))
                             (bookmarks       (propertize (string-join (consult-jj--revision-bookmarks revision) " ")
-                                                         'face 'consult-jj-bookmark))
+                                                         'face 'consult-jj-bookmark-face))
                             (text            (string-trim
                                               (string-join
                                                (list change-id description bookmarks)
