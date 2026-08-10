@@ -67,6 +67,7 @@ Enables `consult-jj-describe-mode' and records REV in
                                "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
                              " ++ "))
          (status            (call-process consult-jj-executable nil t nil
+                                          "--config" "ui.progress-indicator=false"
                                           "--color" "never" "--no-pager"
                                           "log"
                                           "-T" describe-template
@@ -113,6 +114,7 @@ Sends the buffer to `jj describe --stdin' for the revision in
                                            consult-jj-executable nil
                                            (list nil error-file)
                                            nil
+                                           "--config" "ui.progress-indicator=false"
                                            "--color" "never" "--no-pager"
                                            "describe" "-r" consult-jj--describe-revision
                                            "--stdin")))

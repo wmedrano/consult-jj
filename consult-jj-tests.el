@@ -349,6 +349,7 @@ not exit in time."
         (test-wait-for-process)
         (should (equal (process-command proc)
                        '("jj"
+                         "--config" "ui.progress-indicator=false"
                          "--color" "never"
                          "--no-pager"
                          "diff"
@@ -557,6 +558,7 @@ not exit in time."
         (test-wait-for-process)
         (should (equal (process-command proc)
                        '("jj"
+                         "--config" "ui.progress-indicator=false"
                          "--color" "never"
                          "--no-pager"
                          "diff"
@@ -620,6 +622,7 @@ not exit in time."
               (test-wait-for-process)
               (should (equal (process-command proc)
                              '("jj"
+                               "--config" "ui.progress-indicator=false"
                                "--color" "never"
                                "--no-pager"
                                "diff"
@@ -635,6 +638,7 @@ not exit in time."
         (test-wait-for-process)
         (should (equal (process-command proc)
                        '("jj"
+                         "--config" "ui.progress-indicator=false"
                          "--color" "never"
                          "--no-pager"
                          "diff"

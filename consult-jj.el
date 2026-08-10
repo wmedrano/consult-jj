@@ -115,7 +115,8 @@ current jj repository.  Returns the buffer."
 The process is started with `--color never' and `--no-pager'.
 ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
-         (final-args (append '("--color" "never" "--no-pager")
+         (final-args (append '("--config" "ui.progress-indicator=false"
+                               "--color" "never" "--no-pager")
                              args))
          (sentinel   (if on-done (lambda (proc _event)
                                    (when (and (eq (process-status proc) 'exit)
@@ -226,6 +227,7 @@ The log is generated synchronously.  Returns the log buffer."
   (interactive)
   (consult-jj--with-new-buffer "*jj-log*"
     (let ((status (call-process consult-jj-executable nil t nil
+                                "--config" "ui.progress-indicator=false"
                                 "--color" "never" "--no-pager"
                                 "log" "-T"
                                 (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
@@ -280,6 +282,7 @@ change id (trimmed to 8 characters), description, and bookmarks."
   "Get the change id of REV."
   (with-temp-buffer
     (let ((status (call-process consult-jj-executable nil t nil
+                                "--config" "ui.progress-indicator=false"
                                 "--color" "never" "--no-pager"
                                 "log" "--no-graph" "-r" rev
                                 "-T" "json(change_id)")))
@@ -300,7 +303,8 @@ change id (trimmed to 8 characters), description, and bookmarks."
 Runs synchronously and signals a `jj-error' on failure."
   (with-temp-buffer
     (let ((status (apply #'call-process consult-jj-executable nil t nil
-                         (append '("--color" "never" "--no-pager") args))))
+                         (append '("--config" "ui.progress-indicator=false"
+                                   "--color" "never" "--no-pager") args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (funcall consult-jj--display-function (string-trim (buffer-string))))))
