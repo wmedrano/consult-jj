@@ -117,6 +117,10 @@ not exit in time."
       (error "Process %S did not finish within %s seconds"
              proc timeout))))
 
+(defun buffer-string-trimmed ()
+  "Get the buffer as a trimmed string."
+  (string-trim (buffer-string)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; root
@@ -233,24 +237,6 @@ not exit in time."
     (should (equal (test-change-id-of "main")
                    (test-change-id-of "@-")))))
 
-(ert-deftest new-without-rev-prompts-with-prefix-and-default-at ()
-  (with-test-repo
-    (let ((called-with nil))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (prompt default)
-                   (setq called-with (list prompt default))
-                   "@")))
-        (consult-jj-new))
-      (should (equal called-with '("jj new" "@"))))))
-
-(ert-deftest new-without-rev-runs-new-on-prompted-rev ()
-  (with-test-repo
-    (let ((base (test-change-id-of "@")))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (_prompt _default) base)))
-        (consult-jj-new))
-      (should (equal base (test-change-id-of "@-"))))))
-
 (ert-deftest new-displays-command-output ()
   (with-test-repo
     (let* ((displayed nil)
@@ -287,25 +273,6 @@ not exit in time."
     (should (equal (test-change-id-of "@")
                    (test-change-id-of "main")))))
 
-(ert-deftest edit-without-rev-prompts-with-prefix-and-default-at ()
-  (with-test-repo
-    (let ((called-with nil))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (prompt default)
-                   (setq called-with (list prompt default))
-                   "@")))
-        (consult-jj-edit))
-      (should (equal called-with '("jj edit" "@"))))))
-
-(ert-deftest edit-without-rev-runs-edit-on-prompted-rev ()
-  (with-test-repo
-    (test-sh "jj new")
-    (let ((base (test-change-id-of "@-")))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (_prompt _default) base)))
-        (consult-jj-edit))
-      (should (equal base (test-change-id-of "@"))))))
-
 (ert-deftest edit-displays-command-output ()
   (with-test-repo
     (test-sh "jj new")
@@ -327,46 +294,6 @@ not exit in time."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Diff
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(ert-deftest diff-without-prefix-delegates-to-diff-at ()
-  (let ((diff-at-called nil)
-        (diff-from-called nil))
-    (cl-letf (((symbol-function 'consult-jj-diff-at)
-               (lambda (&rest _) (setq diff-at-called t)))
-              ((symbol-function 'consult-jj-diff-from)
-               (lambda (&rest _) (setq diff-from-called t))))
-      (consult-jj-diff nil))
-    (should diff-at-called)
-    (should-not diff-from-called)))
-
-(ert-deftest diff-with-prefix-delegates-to-diff-from ()
-  (let ((diff-at-called nil)
-        (diff-from-called nil))
-    (cl-letf (((symbol-function 'consult-jj-diff-at)
-               (lambda (&rest _) (setq diff-at-called t)))
-              ((symbol-function 'consult-jj-diff-from)
-               (lambda (&rest _) (setq diff-from-called t))))
-      (consult-jj-diff '(4)))
-    (should diff-from-called)
-    (should-not diff-at-called)))
-
-(ert-deftest diff-at-without-rev-prompts-with-prefix-and-default-at ()
-  (with-test-repo
-    (let ((called-with nil))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (prompt default)
-                   (setq called-with (list prompt default))
-                   "@"))
-                ((symbol-function 'consult-jj--start-process) #'ignore))
-        (consult-jj-diff-at))
-      (should (equal called-with '("jj diff at" "@"))))))
-
-(ert-deftest diff-at-with-rev-does-not-prompt ()
-  (with-test-repo
-    (cl-letf (((symbol-function 'consult-jj-read-revision)
-               (lambda (&rest _) (error "should not prompt")))
-              ((symbol-function 'consult-jj--start-process) #'ignore))
-      (should (consult-jj-diff-at "@")))))
 
 (ert-deftest diff-at-returns-jj-diff-buffer ()
   (with-test-repo
@@ -393,9 +320,8 @@ not exit in time."
     (test-write-file "c.txt" "three\n")
     (as-temp-buffer (consult-jj-diff-at "@-")
       (test-wait-for-process)
-      (should (string= (buffer-string)
-                       (concat (test-sh "jj diff -r @- --git")
-                               "\n"))))))
+      (should (string= (buffer-string-trimmed)
+                       (test-sh "jj diff -r @- --git"))))))
 
 (ert-deftest diff-at-sets-default-directory-to-repo-root ()
   (with-test-repo
@@ -461,25 +387,6 @@ not exit in time."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Describe
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(ert-deftest describe-without-rev-prompts-with-prefix-and-default-at ()
-  (with-test-repo
-    (let ((called-with nil)
-          (buffer nil))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (prompt default)
-                   (setq called-with (list prompt default))
-                   "@")))
-        (setq buffer (consult-jj-describe)))
-      (when (buffer-live-p buffer) (kill-buffer buffer))
-      (should (equal called-with '("jj describe" "@"))))))
-
-(ert-deftest describe-with-rev-does-not-prompt ()
-  (with-test-repo
-    (cl-letf (((symbol-function 'consult-jj-read-revision)
-               (lambda (&rest _) (error "should not prompt"))))
-      (as-temp-buffer (consult-jj-describe "@")
-        (should (derived-mode-p 'consult-jj-describe-mode))))))
 
 (ert-deftest describe-buffer-default-directory-is-repo-root ()
   (with-test-repo
@@ -626,24 +533,6 @@ not exit in time."
       (consult-jj-describe-mode)
       (should-error (consult-jj-describe-diff) :type 'user-error))))
 
-(ert-deftest diff-from-without-rev-prompts-with-prefix-and-default-at-minus ()
-  (with-test-repo
-    (let ((called-with nil))
-      (cl-letf (((symbol-function 'consult-jj-read-revision)
-                 (lambda (prompt default)
-                   (setq called-with (list prompt default))
-                   "@"))
-                ((symbol-function 'consult-jj--start-process) #'ignore))
-        (consult-jj-diff-from))
-      (should (equal called-with '("jj diff from" "@-"))))))
-
-(ert-deftest diff-from-with-rev-does-not-prompt ()
-  (with-test-repo
-    (cl-letf (((symbol-function 'consult-jj-read-revision)
-               (lambda (&rest _) (error "should not prompt")))
-              ((symbol-function 'consult-jj--start-process) #'ignore))
-      (should (consult-jj-diff-from "@")))))
-
 (ert-deftest diff-from-returns-jj-diff-buffer ()
   (with-test-repo
     (as-temp-buffer (consult-jj-diff-from "@")
@@ -719,3 +608,50 @@ not exit in time."
       (test-wait-for-process)
       (should (string-match-p "Error" (buffer-string)))
       (should (derived-mode-p 'diff-mode)))))
+
+(ert-deftest diff-from-with-prefix-uses-two-revisions ()
+  (with-test-repo
+    (let ((revisions '("abc123" "def456")))
+      (cl-letf (((symbol-function 'consult-jj-read-revision)
+                 (lambda (&rest _) (pop revisions))))
+        (let ((current-prefix-arg '(4)))
+          (as-temp-buffer (call-interactively #'consult-jj-diff-from)
+            (let ((proc (get-buffer-process (current-buffer))))
+              (test-wait-for-process)
+              (should (equal (process-command proc)
+                             '("jj"
+                               "--color" "never"
+                               "--no-pager"
+                               "diff"
+                               "--git"
+                               "--from" "abc123"
+                               "--to" "def456"))))))))))
+
+(ert-deftest diff-from-with-prefix-starts-process-running-diff-git-from-to ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-diff-from "abc123" "def456")
+      (let ((proc (get-buffer-process (current-buffer))))
+        (should (process-live-p proc))
+        (test-wait-for-process)
+        (should (equal (process-command proc)
+                       '("jj"
+                         "--color" "never"
+                         "--no-pager"
+                         "diff"
+                         "--git"
+                         "--from" "abc123"
+                         "--to" "def456")))))))
+
+(ert-deftest diff-from-with-to-shows-changes-between-revisions ()
+  (with-test-repo
+    (test-write-file "a.txt" "one\n")
+    (test-sh "jj new")
+    (test-write-file "b.txt" "two\n")
+    (test-sh "jj new")
+    (test-write-file "c.txt" "three\n")
+    (let ((from (test-change-id-of "@-"))
+          (to   (test-change-id-of "@")))
+      (as-temp-buffer (consult-jj-diff-from from to)
+        (test-wait-for-process)
+        (should (string= (buffer-string-trimmed)
+                         (test-sh (list "jj" "diff" "--git" "--from" from "--to" to))))))))

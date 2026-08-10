@@ -1,55 +1,48 @@
 ;;; consult-jj-diff.el --- Show jj diffs -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "30") (consult-jj))
+;; Package-Requires: ((emacs "30"))
 
 ;; Author: Will Medrano <wmedrano@wmedrano.dev>
 
 ;;; Commentary:
 ;;
-;; This file provides `consult-jj-diff', which shows diffs of jj
-;; revisions in `diff-mode'.
+;; This file provides commands for showing jj revision diffs in `diff-mode'.
 
 ;;; Code:
 
 (require 'consult-jj)
 
 ;;;###autoload
-(defun consult-jj-diff (arg)
+(defun consult-jj-diff-at (rev)
   "Show the diff of revision REV in a new \"*jj-diff*\" buffer.
 
-When called interactively with a prefix ARG, behave as
-`consult-jj-diff-from'; otherwise, behave as `consult-jj-diff-at'.
-The diff is generated asynchronously and displayed with
+REV is the revision.  When called interactively, prompt with `completing-read',
+defaulting to \"@\".  The diff is generated asynchronously and displayed with
 `diff-mode'."
-  (interactive "P")
-  (if arg
-      (funcall-interactively #'consult-jj-diff-from)
-    (funcall-interactively #'consult-jj-diff-at)))
-
-;;;###autoload
-(defun consult-jj-diff-at (&optional rev)
-  "Show the diff of revision REV in a new \"*jj-diff*\" buffer.
-
-If REV is nil, then prompt with `completing-read', defaulting to \"@\".  The
-diff is generated asynchronously and displayed with `diff-mode'."
-  (interactive)
-  (let* ((rev    (or rev (consult-jj-read-revision "jj diff at" "@")))
-         (buffer (consult-jj--with-new-buffer "*jj-diff*"
+  (interactive (list (consult-jj-read-revision "jj diff at" "@")))
+  (let* ((buffer (consult-jj--with-new-buffer "*jj-diff*"
                    (consult-jj--diff-run `("-r" ,rev)))))
     (pop-to-buffer buffer)
     buffer))
 
 ;;;###autoload
-(defun consult-jj-diff-from (&optional from-rev)
-  "Show the diff of the working copy from FROM-REV in a new \"*jj-diff*\" buffer.
+(defun consult-jj-diff-from (from-rev &optional to-rev)
+  "Show the diff from FROM-REV to TO-REV in a new \"*jj-diff*\" buffer.
 
-When called interactively, prompt for FROM-REV with `completing-read',
-defaulting to \"@-\".  The diff is generated asynchronously and
-displayed with `diff-mode'."
-  (interactive)
-  (let* ((from-rev (or from-rev (consult-jj-read-revision "jj diff from" "@-")))
-         (buffer   (consult-jj--with-new-buffer "*jj-diff*"
-                     (consult-jj--diff-run `("--from" ,from-rev)))))
+FROM-REV is the starting revision.  When called interactively, prompt for
+FROM-REV with `completing-read', defaulting to \"@-\".  With a prefix argument,
+also prompt for TO-REV, defaulting to \"@\", and show the diff between the two
+revisions; otherwise show the diff from FROM-REV to the working copy.  The diff
+is displayed with `diff-mode'."
+  (interactive
+   (list (consult-jj-read-revision "jj diff from" "@-")
+         (when current-prefix-arg
+           (consult-jj-read-revision "jj diff to" "@"))))
+  (let* ((buffer (consult-jj--with-new-buffer "*jj-diff*"
+                   (consult-jj--diff-run
+                    (if to-rev
+                        `("--from" ,from-rev "--to" ,to-rev)
+                      `("--from" ,from-rev))))))
     (pop-to-buffer buffer)
     buffer))
 
