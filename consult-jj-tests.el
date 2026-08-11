@@ -97,7 +97,7 @@ Overwrites the contents if they exist."
                                  "--no-graph" "-T" "description"))
            (output (buffer-string)))
       (unless (zerop result)
-        (error "jj log failed with exit code %d:\n%s" result output))
+        (error "jj log failed %d:\n%s" result output))
       (string-trim output))))
 
 
@@ -371,13 +371,15 @@ not exit in time."
 
 (ert-deftest describe-reject-kills-buffer-without-saving-description ()
   (with-test-repo
-   (let ((describe-buffer (consult-jj-describe "@")))
-     (as-temp-buffer describe-buffer
-                     (delete-region (point-min) (point-max))
-                     (insert "Modified Description\n")
-                     (consult-jj-describe-reject)
-                     (should-not (buffer-live-p describe-buffer))
-                     (should (equal "" (test-jj-description "@")))))))
+    (test-sh "jj describe -m 'Initial description'")
+    (as-temp-buffer (consult-jj-describe "@")
+      (let ((describe-buffer (current-buffer)))
+        (delete-region (point-min) (point-max))
+        (insert "Modified Description")
+        (should (consult-jj-describe-reject))
+        (with-current-buffer test-repo-buffer
+          (should-not (buffer-live-p describe-buffer))
+          (should (equal "Initial description" (test-jj-description "@"))))))))
 
 (ert-deftest describe-reject-outside-describe-buffer-is-error ()
   (with-test-repo
