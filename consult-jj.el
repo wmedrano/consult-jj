@@ -195,17 +195,13 @@ is not in CANDIDATES, the highlight is left unchanged."
 
 
 (defconst consult-jj--revision-fields
-  '((:change-id          . "json(change_id)")
-    (:change-id-shortest . "json(change_id.shortest().prefix())")
-    (:commit-id          . "json(commit_id)")
-    (:description        . "json(description.first_line())")
-    (:bookmarks          . "json(bookmarks.map(|b| b.name()))"))
+  '((:change-id   . "json(change_id)")
+    (:description . "json(description.first_line())")
+    (:bookmarks   . "json(bookmarks.map(|b| b.name()))"))
   "Alist mapping revision field keywords to jj template expressions.")
 
 (cl-defstruct (consult-jj--revision (:constructor consult-jj--make-revision))
   change-id
-  change-id-shortest
-  commit-id
   description
   bookmarks)
 
