@@ -122,7 +122,7 @@ ON-DONE is called in the process buffer when the process exits."
                                    (when (and (eq (process-status proc) 'exit)
                                               (buffer-live-p (process-buffer proc)))
                                      (with-current-buffer (process-buffer proc)
-                                       (funcall on-done))))))
+                                       (funcall on-done (process-exit-status proc)))))))
          (proc (apply #'start-process (format "jj-%s" command)
                       (current-buffer)
                       consult-jj-executable

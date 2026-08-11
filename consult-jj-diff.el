@@ -53,10 +53,14 @@ is displayed with `diff-mode'."
            args)
    :on-done #'consult-jj--diff-finalize))
 
-(defun consult-jj--diff-finalize ()
-  "Finalize the diff buffer by enabling `diff-mode' and `read-only-mode'."
+(defun consult-jj--diff-finalize (exit-status)
+  "Finalize the diff buffer by enabling `diff-mode' and `read-only-mode'.
+
+When EXIT-STATUS is non-zero, the buffer contains a jj error.  Leave it in
+`fundamental-mode' so the error is displayed without diff highlighting."
   (goto-char (point-min))
-  (diff-mode)
+  (unless (> exit-status 0)
+    (diff-mode))
   (read-only-mode 1))
 
 (provide 'consult-jj-diff)

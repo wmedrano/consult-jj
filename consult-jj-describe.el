@@ -61,7 +61,7 @@ Enables `consult-jj-describe-mode' and records REV in
                              '("description"
                                "\"\\n\\n\""
                                "\"JJ: Change ID: \""
-                               "change_id.shortest()"
+                               "change_id.shortest(8)"
                                "\"\\n\""
                                "\"JJ:\\n\""
                                "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
