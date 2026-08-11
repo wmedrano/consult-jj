@@ -2,6 +2,8 @@
 
 JJ integration for Emacs.
 
+[[./resources/demo.gif]]
+
 * Functions
 
 | Functions                  | Description                                                          |
