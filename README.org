@@ -4,6 +4,45 @@ JJ integration for Emacs.
 
 [[./resources/demo.gif]]
 
+* Requirements
+
+- Emacs 30+
+- [[https://github.com/martinvonz/jj][Jujutsu (jj)]] CLI installed and accessible in your ~PATH~
+- ~vertico~ and ~markdown-mode~ (required by ~consult-jj-describe~)
+
+* Installation
+
+** package-vc
+
+#+begin_src emacs-lisp
+(use-package consult-jj
+  :vc (:url "https://github.com/wmedrano/consult-jj.git"))
+#+end_src
+
+** straight.el
+
+#+begin_src emacs-lisp
+(use-package consult-jj
+  :straight (:host github :repo "wmedrano/consult-jj"))
+#+end_src
+
+** Elpaca
+
+#+begin_src emacs-lisp
+(use-package consult-jj
+  :ensure (:host github :repo "wmedrano/consult-jj"))
+#+end_src
+
+** MELPA (Coming Soon)
+
+Once ~consult-jj~ is available on MELPA, you will be able to install it via ~M-x
+package-install RET consult-jj RET~ or:
+
+#+begin_src emacs-lisp
+(use-package consult-jj
+  :ensure t)
+#+end_src
+
 * Functions
 
 | Functions                  | Description                                                          |
