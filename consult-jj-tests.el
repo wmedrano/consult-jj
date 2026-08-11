@@ -327,6 +327,27 @@ not exit in time."
                                         change-id-shortest)
                                 (buffer-string)))))))
 
+(ert-deftest describe-mode-hook-runs-with-revision-variable ()
+  (with-test-repo
+    (test-sh
+     "printf 'First Line\nSecondLine\n' | jj describe --stdin")
+    (let* ((got-revision nil)
+           (got-point    nil)
+           (got-calls    0)
+           (hook (lambda ()
+                   (setq got-revision consult-jj--describe-revision
+                         got-point (point)
+                         got-calls (1+ got-calls)))))
+      (unwind-protect
+          (progn
+            (add-hook 'consult-jj-describe-mode-hook hook)
+            (as-temp-buffer (consult-jj-describe "@")
+              (should (equal got-point    (point-min)))
+              (should (equal got-calls    1))
+              (should (equal got-revision (test-jj-change-id "@")))
+              (buffer-string)))
+        (remove-hook 'consult-jj-describe-mode-hook hook)))))
+
 (ert-deftest describe-on-unresolvable-revision-is-error ()
   (with-test-repo
     (should-error (consult-jj-describe "no-such-revision")

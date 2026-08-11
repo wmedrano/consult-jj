@@ -195,17 +195,13 @@ is not in CANDIDATES, the highlight is left unchanged."
 
 
 (defconst consult-jj--revision-fields
-  '((:change-id          . "json(change_id)")
-    (:change-id-shortest . "json(change_id.shortest().prefix())")
-    (:commit-id          . "json(commit_id)")
-    (:description        . "json(description.first_line())")
-    (:bookmarks          . "json(bookmarks.map(|b| b.name()))"))
+  '((:change-id   . "json(change_id)")
+    (:description . "json(description.first_line())")
+    (:bookmarks   . "json(bookmarks.map(|b| b.name()))"))
   "Alist mapping revision field keywords to jj template expressions.")
 
 (cl-defstruct (consult-jj--revision (:constructor consult-jj--make-revision))
   change-id
-  change-id-shortest
-  commit-id
   description
   bookmarks)
 
@@ -278,19 +274,6 @@ change id (trimmed to 8 characters), description, and bookmarks."
                                                " "))))
                        (cons text overlay)))))
 
-(defun consult-jj--rev-change-id (rev)
-  "Get the change id of REV."
-  (with-temp-buffer
-    (let ((status (call-process consult-jj-executable nil t nil
-                                "--config" "ui.progress-indicator=false"
-                                "--color" "never" "--no-pager"
-                                "log" "--no-graph" "-r" rev
-                                "-T" "json(change_id)")))
-      (unless (zerop status)
-        (consult-jj--signal (buffer-string)))
-      (goto-char (point-min))
-      (json-parse-buffer :object-type 'alist :array-type 'list))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; New/Edit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,9 +285,11 @@ change id (trimmed to 8 characters), description, and bookmarks."
 
 Runs synchronously and signals a `jj-error' on failure."
   (with-temp-buffer
-    (let ((status (apply #'call-process consult-jj-executable nil t nil
-                         (append '("--config" "ui.progress-indicator=false"
-                                   "--color" "never" "--no-pager") args))))
+    (let ((status (apply
+                   #'call-process consult-jj-executable nil t nil
+                   (append '("--config" "ui.progress-indicator=false"
+                             "--color" "never" "--no-pager")
+                           args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (funcall consult-jj--display-function (string-trim (buffer-string))))))
