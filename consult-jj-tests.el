@@ -93,9 +93,12 @@ Overwrites the contents if they exist."
 (defun test-jj-description (revision)
   "Return the description of REVISION."
   (with-temp-buffer
-    (should (zerop (call-process "jj" nil t nil "log" "-r" revision
-                                 "--no-graph" "-T" "description")))
-    (string-trim (buffer-string))))
+    (let* ((result (call-process "jj" nil t nil "log" "-r" revision
+                                 "--no-graph" "-T" "description"))
+           (output (buffer-string)))
+      (unless (zerop result)
+        (error "jj log failed with exit code %d:\n%s" result output))
+      (string-trim output))))
 
 
 (defun test-wait-for-process (&optional buffer)
@@ -368,14 +371,13 @@ not exit in time."
 
 (ert-deftest describe-reject-kills-buffer-without-saving-description ()
   (with-test-repo
-    (let ((describe-buffer (consult-jj-describe "@")))
-      (as-temp-buffer describe-buffer
-        (delete-region (point-min) (point-max))
-        (insert "Modified Description\n")
-        (consult-jj-describe-reject)
-        (should-not (buffer-live-p describe-buffer))
-        (should (equal ""
-                       (test-jj-description "@")))))))
+   (let ((describe-buffer (consult-jj-describe "@")))
+     (as-temp-buffer describe-buffer
+                     (delete-region (point-min) (point-max))
+                     (insert "Modified Description\n")
+                     (consult-jj-describe-reject)
+                     (should-not (buffer-live-p describe-buffer))
+                     (should (equal "" (test-jj-description "@")))))))
 
 (ert-deftest describe-reject-outside-describe-buffer-is-error ()
   (with-test-repo
