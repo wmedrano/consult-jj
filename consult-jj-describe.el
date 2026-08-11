@@ -19,6 +19,7 @@
   "Change id of the revision whose description is being edited.
 
 Buffer-local in `consult-jj-describe-mode' buffers.")
+(put 'consult-jj--describe-revision 'permanent-local t)
 
 (define-derived-mode consult-jj-describe-mode markdown-mode "jj-describe"
   "Major mode for editing a jj change description.
@@ -74,17 +75,17 @@ Enables `consult-jj-describe-mode' and records REV in
                                           "--no-graph" "-r" rev)))
     (unless (zerop status)
       (consult-jj--signal (buffer-string))))
+  (setq-local consult-jj--describe-revision rev)
+  (goto-char (point-min))
   (consult-jj-describe-mode)
   (setq-local
-   consult-jj--describe-revision rev
    header-line-format (substitute-command-keys
                        (string-join
                         '("JJ Describe"
                           "Accept (\\[consult-jj-describe-accept])"
                           "Reject (\\[consult-jj-describe-reject])"
                           "Diff (\\[consult-jj-describe-diff])")
-                        " | ")))
-  (goto-char (point-min)))
+                        " | "))))
 
 (defun consult-jj-describe-accept ()
   "Set the buffer's contents as the description of the revision.

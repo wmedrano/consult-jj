@@ -333,15 +333,18 @@ not exit in time."
      "printf 'First Line\nSecondLine\n' | jj describe --stdin")
     (let* ((got-revision nil)
            (got-point    nil)
+           (got-calls    0)
            (hook (lambda ()
                    (setq got-revision consult-jj--describe-revision
-                         got-point (point)))))
+                         got-point (point)
+                         got-calls (1+ got-calls)))))
       (unwind-protect
           (progn
             (add-hook 'consult-jj-describe-mode-hook hook)
             (as-temp-buffer (consult-jj-describe "@")
               (should (equal got-revision "@"))
-              (should (equal got-point (point-min)))))
+              (should (equal got-point    (point-min)))
+              (should (equal got-calls    1))))
         (remove-hook 'consult-jj-describe-mode-hook hook)))))
 
 (ert-deftest describe-on-unresolvable-revision-is-error ()

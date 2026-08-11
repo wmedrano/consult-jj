@@ -302,9 +302,11 @@ change id (trimmed to 8 characters), description, and bookmarks."
 
 Runs synchronously and signals a `jj-error' on failure."
   (with-temp-buffer
-    (let ((status (apply #'call-process consult-jj-executable nil t nil
-                         (append '("--config" "ui.progress-indicator=false"
-                                   "--color" "never" "--no-pager") args))))
+    (let ((status (apply
+                   #'call-process consult-jj-executable nil t nil
+                   (append '("--config" "ui.progress-indicator=false"
+                             "--color" "never" "--no-pager")
+                           args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (funcall consult-jj--display-function (string-trim (buffer-string))))))
