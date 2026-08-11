@@ -342,9 +342,10 @@ not exit in time."
           (progn
             (add-hook 'consult-jj-describe-mode-hook hook)
             (as-temp-buffer (consult-jj-describe "@")
-              (should (equal got-revision "@"))
               (should (equal got-point    (point-min)))
-              (should (equal got-calls    1))))
+              (should (equal got-calls    1))
+              (should (equal got-revision (test-jj-change-id "@")))
+              (buffer-string)))
         (remove-hook 'consult-jj-describe-mode-hook hook)))))
 
 (ert-deftest describe-on-unresolvable-revision-is-error ()

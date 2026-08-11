@@ -278,19 +278,6 @@ change id (trimmed to 8 characters), description, and bookmarks."
                                                " "))))
                        (cons text overlay)))))
 
-(defun consult-jj--rev-change-id (rev)
-  "Get the change id of REV."
-  (with-temp-buffer
-    (let ((status (call-process consult-jj-executable nil t nil
-                                "--config" "ui.progress-indicator=false"
-                                "--color" "never" "--no-pager"
-                                "log" "--no-graph" "-r" rev
-                                "-T" "json(change_id)")))
-      (unless (zerop status)
-        (consult-jj--signal (buffer-string)))
-      (goto-char (point-min))
-      (json-parse-buffer :object-type 'alist :array-type 'list))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; New/Edit
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

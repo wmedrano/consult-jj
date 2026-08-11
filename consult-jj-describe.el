@@ -56,26 +56,32 @@ The description is followed by a comment block prefixed with
 removes those comment lines before sending the buffer to
 `jj describe --stdin'.
 
-Enables `consult-jj-describe-mode' and records REV in
-`consult-jj--describe-revision'."
-  (let* ((describe-template (string-join
-                             '("description"
-                               "\"\\n\\n\""
-                               "\"JJ: Change ID: \""
-                               "change_id.shortest(8)"
-                               "\"\\n\""
-                               "\"JJ:\\n\""
-                               "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
-                             " ++ "))
-         (status            (call-process consult-jj-executable nil t nil
-                                          "--config" "ui.progress-indicator=false"
-                                          "--color" "never" "--no-pager"
-                                          "log"
-                                          "-T" describe-template
-                                          "--no-graph" "-r" rev)))
+Enables `consult-jj-describe-mode' and records the change id parsed
+from the buffer in `consult-jj--describe-revision'."
+  (let* ((describe-template
+          (string-join
+           '("description"
+             "\"\\n\\n\""
+             "\"JJ: Change ID: \""
+             "change_id"
+             "\"\\n\""
+             "\"JJ:\\n\""
+             "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
+           " ++ "))
+         (status
+          (call-process consult-jj-executable nil t nil
+                        "--config" "ui.progress-indicator=false"
+                        "--color" "never" "--no-pager"
+                        "log"
+                        "-T" describe-template
+                        "--no-graph" "-r" rev)))
     (unless (zerop status)
       (consult-jj--signal (buffer-string))))
-  (setq-local consult-jj--describe-revision rev)
+  (goto-char (point-min))
+  (if (re-search-forward "^JJ: Change ID: \\([a-z0-9]+\\)" nil t)
+      (setq-local consult-jj--describe-revision
+                  (match-string-no-properties 1))
+    (setq-local consult-jj--describe-revision rev))
   (goto-char (point-min))
   (consult-jj-describe-mode)
   (setq-local
