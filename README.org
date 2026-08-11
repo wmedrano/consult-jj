@@ -7,9 +7,14 @@ JJ integration for Emacs.
 | Functions                  | Description                                                          |
 |----------------------------+----------------------------------------------------------------------|
 | ~consult-jj-root~          | Get the root directory or signal an error if not in a JJ repository. |
-| ~consult-jj-new~           | Create a new change on top of a revision.                            |
-| ~consult-jj-edit~          | Move the working copy to a revision.                                 |
 | ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                      |
+
+* JJ Working Copy
+
+| Functions         | Description                               |
+|-------------------+-------------------------------------------|
+| ~consult-jj-new~  | Create a new change on top of a revision. |
+| ~consult-jj-edit~ | Move the working copy to a revision.      |
 
 * JJ Diff
 
@@ -45,3 +50,18 @@ Example:
 #+begin_src emacs-lisp
 (setq consult-jj-executable "/path/to/jj")
 #+end_src
+
+** Faces
+
+The ~jj log~ output is fontified using the following faces.
+
+| Face                             | Inherits                  | Description                                    |
+|----------------------------------+---------------------------+------------------------------------------------|
+| ~consult-jj-bookmark-face~       | ~font-lock-type-face~     | Bookmarks in the jj log.                       |
+| ~consult-jj-change-id-face~      | ~font-lock-constant-face~ | Change ids in the jj log.                      |
+| ~consult-jj-selected-face~       | ~highlight~               | The currently selected revision in the jj log. |
+| ~consult-jj-graph-face~          | ~font-lock-keyword-face~  | Graph line characters in the jj log.           |
+| ~consult-jj-email-face~          | ~font-lock-string-face~   | Email addresses in the jj log.                 |
+| ~consult-jj-timestamp-face~      | ~font-lock-type-face~     | Timestamps in the jj log.                      |
+| ~consult-jj-commit-id-face~      | ~font-lock-comment-face~  | Commit ids in the jj log.                      |
+| ~consult-jj-no-description-face~ | ~font-lock-comment-face~  | "(no description set)" in the jj log.          |
