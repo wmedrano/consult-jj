@@ -170,6 +170,27 @@ not exit in time."
         (should (stringp (car third)))
         (should (overlayp (cdr third)))))))
 
+(ert-deftest read-revision-shows-preview ()
+  (with-test-repo
+    (test-sh "jj new")
+    (let* ((got-buffer nil)
+           (got-window nil)
+           (completing-read-function
+            (lambda (_ _ &rest _)
+              (let ((buffer (get-buffer "*jj-log*"))
+                    (window (get-buffer-window "*jj-log*")))
+                (with-current-buffer buffer
+                  (should (buffer-live-p buffer))
+                  (should (derived-mode-p 'consult-jj--log-mode))
+                  (should (window-live-p window))
+                  (should (window-at-side-p window 'bottom))
+                  (setq got-buffer buffer
+                        got-window window))
+                ""))))
+      (consult-jj-read-revision "" "")
+      (should-not (buffer-live-p got-buffer))
+      (should-not (window-live-p got-window)))))
+
 (ert-deftest read-revision-contains-change-id-description-tags ()
   (with-test-repo
     (test-sh
