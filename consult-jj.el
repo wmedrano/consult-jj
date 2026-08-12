@@ -153,31 +153,26 @@ ON-DONE is called in the process buffer when the process exits."
 
 PROMPT-PREFIX is prepended to the prompt.
 DEFAULT-REVISION is offered as the default."
-  (let* ((jj-log-buffer (consult-jj--log))
-         (jj-log-window (display-buffer-in-side-window
-                         jj-log-buffer
-                         '((side              . bottom)
-                           (window-height     . fit-window-to-buffer)
-                           (window-parameters . ((mode-line-format . none))))))
-         (candidates    (consult-jj--log-candidates jj-log-buffer))
+  (let* ((jj-log-buffer     (consult-jj--log))
+         (jj-log-window     (display-buffer-in-side-window
+                             jj-log-buffer
+                             '((side              . bottom)
+                               (window-height     . fit-window-to-buffer)
+                               (window-parameters . ((mode-line-format . none))))))
+         (candidates        (consult-jj--log-candidates jj-log-buffer))
+         (update-highlights (lambda ()
+                              (consult-jj--read-revision-update-highlights
+                               candidates default-revision)))
          ;; The candidates are already sorted by `jj log' output.
          (vertico-sort-function nil))
-    (when (string= default-revision "@")
-      (consult-jj--read-revision-highlight-candidate (caar candidates)
-                                                     candidates))
     (unwind-protect
-        (let ((rev (minibuffer-with-setup-hook
-                       (lambda ()
-                         (add-hook 'post-command-hook
-                                   (lambda ()
-                                     (when (fboundp 'vertico--candidate)
-                                       (consult-jj--read-revision-highlight-candidate
-                                        (vertico--candidate)
-                                        candidates)))
-                                   nil t))
-                     (completing-read
-                      (format "%s revision (default %s): " prompt-prefix default-revision)
-                      candidates))))
+        (let ((rev
+               (minibuffer-with-setup-hook
+                   (lambda ()
+                     (add-hook 'post-command-hook update-highlights nil t))
+                 (completing-read
+                  (format "%s revision (default %s): " prompt-prefix default-revision)
+                  candidates))))
           (cond
            ;; Empty -> Default
            ((string-empty-p rev) default-revision)
@@ -192,28 +187,37 @@ DEFAULT-REVISION is offered as the default."
       (when (buffer-live-p jj-log-buffer)
         (kill-buffer jj-log-buffer)))))
 
-(defun consult-jj--read-revision-highlight-candidate (candidate candidates)
-  "Highlight the log entry for the selected CANDIDATE.
+(defun consult-jj--read-revision-update-highlights (candidates default-revision)
+  "Update the the selected items from CANDIDATES.
 
-CANDIDATES is the alist of candidate text to overlay.  When CANDIDATE
-is not in CANDIDATES, the highlight is left unchanged."
-  (when-let* ((overlay   (cdr (assoc candidate candidates))))
-    (dolist (entry candidates)
-      (overlay-put (cdr entry) 'face
-                   (when (eq (cdr entry) overlay)
-                     'consult-jj-selected-face)))))
-
+If the candidate selection is empty, then DEFAULT-REVISION is used."
+  (when-let* ((selected (when (fboundp 'vertico--candidate)
+                          (or (vertico--candidate) ""))))
+         (cl-loop
+          for (candidate . overlay) in candidates
+          for revision = (overlay-get overlay 'consult-jj--revision)
+          when revision
+          do (overlay-put
+              overlay
+              'face
+              (when (or (string= candidate selected)
+                        (and (string= "@" default-revision)
+                             (or (string= "@" selected) (string= "" selected))
+                             (consult-jj--revision-current-working-copy-p revision)))
+                'consult-jj-selected-face)))))
 
 (defconst consult-jj--revision-fields
-  '((:change-id   . "json(change_id)")
-    (:description . "json(description.first_line())")
-    (:bookmarks   . "json(bookmarks.map(|b| b.name()))"))
+  '((:change-id              . "json(change_id)")
+    (:description            . "json(description.first_line())")
+    (:bookmarks              . "json(bookmarks.map(|b| b.name()))")
+    (:current-working-copy-p . "json(stringify(current_working_copy))"))
   "Alist mapping revision field keywords to jj template expressions.")
 
 (cl-defstruct (consult-jj--revision (:constructor consult-jj--make-revision))
   change-id
   description
-  bookmarks)
+  bookmarks
+  current-working-copy-p)
 
 (define-derived-mode consult-jj--log-mode special-mode "jj-log"
   "Major mode for displaying `jj log' output."
@@ -254,6 +258,8 @@ The log is generated synchronously.  Returns the log buffer."
              (revision-args (cl-loop for (field . _template) in consult-jj--revision-fields
                                      append (list field (json-parse-buffer))))
              (revision      (apply #'consult-jj--make-revision revision-args)))
+        (setf (consult-jj--revision-current-working-copy-p revision)
+              (string= "true" (consult-jj--revision-current-working-copy-p revision)))
         (delete-region json-start (point))
         (forward-line 2)
         (overlay-put (make-overlay start (point))
