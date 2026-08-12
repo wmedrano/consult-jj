@@ -29,7 +29,7 @@
     "--color" "never" "--no-pager")
   "Args prepended to every `jj' command.
 
-By default, the progress indicator, color, and pager are disabled. This makes
+By default, the progress indicator, color, and pager are disabled.  This makes
 `jj' output is suitable for parsing and display in Emacs."
   :type '(repeat string)
   :group 'consult-jj)
