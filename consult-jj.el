@@ -24,6 +24,16 @@
   :type 'string
   :group 'consult-jj)
 
+(defcustom consult-jj-global-args
+  '("--config" "ui.progress-indicator=false"
+    "--color" "never" "--no-pager")
+  "Args prepended to every `jj' command.
+
+By default, the progress indicator, color, and pager are disabled. This makes
+`jj' output is suitable for parsing and display in Emacs."
+  :type '(repeat string)
+  :group 'consult-jj)
+
 (defface consult-jj-bookmark-face
   '((t :inherit font-lock-type-face))
   "Face for bookmarks in the jj log."
@@ -90,8 +100,8 @@ repository, signal with a clearer message."
 
 Returns an error if the `default-directory' is not in a jj repository."
   (with-temp-buffer
-    (let* ((status (call-process consult-jj-executable nil t nil
-                                 "root"))
+    (let* ((status (apply #'call-process consult-jj-executable nil t nil
+                          (append consult-jj-global-args '("root"))))
            (result (string-trim (buffer-substring (point-min)
                                                   (point-max)))))
       (if (= status 0)
@@ -114,12 +124,11 @@ current jj repository.  Returns the buffer."
 (cl-defun consult-jj--start-process (args &key on-done)
   "Start a `jj' process with ARGS.
 
-The process is started with `--color never' and `--no-pager'.
+The process is started with the global args in `consult-jj-global-args',
+which disable the progress indicator, color, and pager.
 ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
-         (final-args (append '("--config" "ui.progress-indicator=false"
-                               "--color" "never" "--no-pager")
-                             args)))
+         (final-args (append consult-jj-global-args args)))
     (make-process
      :name (format "jj-%s" command)
      :buffer (current-buffer)
@@ -223,12 +232,13 @@ is not in CANDIDATES, the highlight is left unchanged."
 The log is generated synchronously.  Returns the log buffer."
   (interactive)
   (consult-jj--with-new-buffer "*jj-log*"
-    (let ((status (call-process consult-jj-executable nil t nil
-                                "--config" "ui.progress-indicator=false"
-                                "--color" "never" "--no-pager"
-                                "log" "-T"
-                                (string-join (append (mapcar #'cdr consult-jj--revision-fields) '("builtin_log_compact"))
-                                             "++"))))
+    (let* ((template (string-join (append (mapcar #'cdr consult-jj--revision-fields)
+                                          '("builtin_log_compact"))
+                                  "++"))
+           (status (apply #'call-process consult-jj-executable nil t nil
+                          (append consult-jj-global-args
+                                  '("log" "-T")
+                                  (list template)))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (consult-jj--log-finalize))))
@@ -294,9 +304,7 @@ Runs synchronously and signals a `jj-error' on failure."
   (with-temp-buffer
     (let ((status (apply
                    #'call-process consult-jj-executable nil t nil
-                   (append '("--config" "ui.progress-indicator=false"
-                             "--color" "never" "--no-pager")
-                           args))))
+                   (append consult-jj-global-args args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (funcall consult-jj--display-function (string-trim (buffer-string))))))

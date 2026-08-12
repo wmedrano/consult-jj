@@ -69,12 +69,11 @@ from the buffer in `consult-jj--describe-revision'."
              "\"JJ: Lines starting with \\\"JJ:\\\" (like this one) will be removed.\\n\"")
            " ++ "))
          (status
-          (call-process consult-jj-executable nil t nil
-                        "--config" "ui.progress-indicator=false"
-                        "--color" "never" "--no-pager"
-                        "log"
-                        "-T" describe-template
-                        "--no-graph" "-r" rev)))
+          (apply #'call-process consult-jj-executable nil t nil
+                 (append consult-jj-global-args
+                         `("log"
+                           "-T" ,describe-template
+                           "--no-graph" "-r" ,rev)))))
     (unless (zerop status)
       (consult-jj--signal (buffer-string))))
   (goto-char (point-min))
@@ -110,14 +109,12 @@ from the buffer in `consult-jj--describe-revision'."
     (unwind-protect
         (unless (zerop (with-temp-buffer
                          (consult-jj--insert-sanitized-describe buffer)
-                         (call-process-region (point-min) (point-max)
-                                              consult-jj-executable nil
-                                              (list nil tmp-error-file)
-                                              nil
-                                              "--config" "ui.progress-indicator=false"
-                                              "--color" "never" "--no-pager"
-                                              "describe" "-r" revision
-                                              "--stdin")))
+                         (apply #'call-process-region (point-min) (point-max)
+                                consult-jj-executable nil
+                                (list nil tmp-error-file)
+                                nil
+                                (append consult-jj-global-args
+                                        `("describe" "-r" ,revision "--stdin")))))
           (consult-jj--signal (with-temp-buffer
                                 (insert-file-contents tmp-error-file)
                                 (buffer-string))))
