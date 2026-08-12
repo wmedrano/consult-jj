@@ -380,6 +380,15 @@ not exit in time."
     (should (equal "Description"
                    (test-jj-description "@")))))
 
+(ert-deftest describe-accept-on-error-leaves-buffer-unchanged ()
+  (with-test-repo
+    (as-temp-buffer (consult-jj-describe "root()")
+      (delete-region (point-min) (point-max))
+      (insert "New description")
+      (should-error (consult-jj-describe-accept)
+                    :type 'jj-error)
+      (should (equal (buffer-string) "New description")))))
+
 (ert-deftest describe-accept-outside-describe-buffer-is-error ()
   (with-test-repo
     (as-temp-buffer (consult-jj-describe "@")

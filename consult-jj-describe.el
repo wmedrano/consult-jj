@@ -96,13 +96,42 @@ from the buffer in `consult-jj--describe-revision'."
 (defun consult-jj-describe-accept ()
   "Set the buffer's contents as the description of the revision.
 
-Sends the buffer to `jj describe --stdin' for the revision in
-`consult-jj--describe-revision', then kills the buffer."
+- Kills the buffer on success.
+- Lines starting with JJ: are trimmed.
+- Trailing whitespace is also removed."
   (interactive)
   (unless (derived-mode-p 'consult-jj-describe-mode)
     (user-error "Not in a `consult-jj-describe-mode' buffer"))
   (unless consult-jj--describe-revision
     (user-error "No revision is being described in this buffer"))
+  (let ((buffer         (current-buffer))
+        (revision       consult-jj--describe-revision)
+        (tmp-error-file (make-temp-file "consult-jj-describe-")))
+    (unwind-protect
+        (unless (zerop (with-temp-buffer
+                         (consult-jj--insert-sanitized-describe buffer)
+                         (call-process-region (point-min) (point-max)
+                                              consult-jj-executable nil
+                                              (list nil tmp-error-file)
+                                              nil
+                                              "--config" "ui.progress-indicator=false"
+                                              "--color" "never" "--no-pager"
+                                              "describe" "-r" revision
+                                              "--stdin")))
+          (consult-jj--signal (with-temp-buffer
+                                (insert-file-contents tmp-error-file)
+                                (buffer-string))))
+      (delete-file tmp-error-file))
+    (with-current-buffer buffer
+      (funcall consult-jj--display-function "Description for %s updated" revision)
+      (kill-buffer))))
+
+(defun consult-jj--insert-sanitized-describe (src-buffer)
+  "Copy the contents of SRC-BUFFER over to the current buffer and sanitize.
+
+This involves removing lines that start with JJ: and cleaning up some
+whitespace."
+  (insert-buffer-substring src-buffer)
   (flush-lines "^JJ:" (point-min) (point-max))
   (delete-trailing-whitespace)
   (let ((end (point-max)))
@@ -114,25 +143,7 @@ Sends the buffer to `jj describe --stdin' for the revision in
   (let ((start (point)))
     (skip-chars-forward "\n")
     (unless (= (point) start)
-      (delete-region start (point))))
-  (let ((error-file (make-temp-file "consult-jj-describe-")))
-    (unwind-protect
-        (let ((status (call-process-region (point-min) (point-max)
-                                           consult-jj-executable nil
-                                           (list nil error-file)
-                                           nil
-                                           "--config" "ui.progress-indicator=false"
-                                           "--color" "never" "--no-pager"
-                                           "describe" "-r" consult-jj--describe-revision
-                                           "--stdin")))
-          (unless (zerop status)
-            (consult-jj--signal
-             (with-temp-buffer
-               (insert-file-contents error-file)
-               (buffer-string)))))
-      (delete-file error-file)))
-  (funcall consult-jj--display-function "Description updated")
-  (kill-buffer))
+      (delete-region start (point)))))
 
 (defun consult-jj-describe-reject ()
   "Kill the buffer without saving the description."

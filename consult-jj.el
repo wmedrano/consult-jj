@@ -1,7 +1,9 @@
 ;;; consult-jj.el --- JJ integration for consult  -*- lexical-binding: t -*-
 
-;; Package-Requires: ((emacs "30"))
-
+;; Package-Requires: ((emacs "30") (markdown-mode "2.0"))
+;; Version: 0.1.0
+;; URL: https://github.com/wmedrano/consult-jj
+;; Keywords: vc, tools
 ;; Author: Will Medrano <wmedrano@wmedrano.dev>
 
 ;;; Commentary:
