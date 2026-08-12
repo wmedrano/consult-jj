@@ -117,17 +117,16 @@ ON-DONE is called in the process buffer when the process exits."
   (let* ((command    (car args))
          (final-args (append '("--config" "ui.progress-indicator=false"
                                "--color" "never" "--no-pager")
-                             args))
-         (sentinel   (if on-done (lambda (proc _event)
-                                   (when (and (eq (process-status proc) 'exit)
-                                              (buffer-live-p (process-buffer proc)))
-                                     (with-current-buffer (process-buffer proc)
-                                       (funcall on-done (process-exit-status proc)))))))
-         (proc (apply #'start-process (format "jj-%s" command)
-                      (current-buffer)
-                      consult-jj-executable
-                      final-args)))
-    (if sentinel (set-process-sentinel proc sentinel))))
+                             args)))
+    (make-process
+     :name (format "jj-%s" command)
+     :buffer (current-buffer)
+     :command (cons consult-jj-executable final-args)
+     :sentinel (if on-done (lambda (proc _event)
+                             (when (and (eq (process-status proc) 'exit)
+                                        (buffer-live-p (process-buffer proc)))
+                               (with-current-buffer (process-buffer proc)
+                                 (funcall on-done (process-exit-status proc)))))))))
 
 
 
