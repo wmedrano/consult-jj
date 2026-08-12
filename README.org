@@ -82,9 +82,10 @@ containing the current description followed by comment lines prefixed with
 
 * Configuration
 
-| Variable                | Default | Description                |
-|-------------------------+---------+----------------------------|
-| ~consult-jj-executable~ | ~"jj"~  | Path to the jj executable. |
+| Variable                 | Default                                                                     | Description                           |
+|--------------------------+-----------------------------------------------------------------------------+---------------------------------------|
+| ~consult-jj-executable~  | ~"jj"~                                                                      | Path to the jj executable.            |
+| ~consult-jj-global-args~ | ~("--config" "ui.progress-indicator=false" "--color" "never" "--no-pager")~ | Args prepended to every ~jj~ command. |
 
 Example:
 
