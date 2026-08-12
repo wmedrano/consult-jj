@@ -256,23 +256,29 @@ The log is generated synchronously.  Returns the log buffer."
 Each element is a cons cell `(TEXT . OVERLAY)'.  TEXT is the revision's
 change id (trimmed to 8 characters), description, and bookmarks."
   (with-current-buffer buffer
-    (cl-loop for overlay in (overlays-in (point-min) (point-max))
-             for revision = (overlay-get overlay 'consult-jj--revision)
-             when revision
-             collect (let* ((change-id       (let ((id (consult-jj--revision-change-id revision)))
-                                               (propertize (substring id 0 (min 8 (length id)))
-                                                           'face 'consult-jj-change-id-face)))
-                            (raw-description (consult-jj--revision-description revision))
-                            (description     (if (string-empty-p raw-description)
-                                                 (propertize "(no description set)" 'face 'consult-jj-no-description-face)
-                                               raw-description))
-                            (bookmarks       (propertize (string-join (consult-jj--revision-bookmarks revision) " ")
-                                                         'face 'consult-jj-bookmark-face))
-                            (text            (string-trim
-                                              (string-join
-                                               (list change-id description bookmarks)
-                                               " "))))
-                       (cons text overlay)))))
+    (sort
+     (cl-loop for overlay in (overlays-in (point-min) (point-max))
+              for revision = (overlay-get overlay 'consult-jj--revision)
+              when revision
+              collect (let* ((change-id       (let ((id (consult-jj--revision-change-id revision)))
+                                                (propertize (substring id 0 (min 8 (length id)))
+                                                            'face 'consult-jj-change-id-face)))
+                             (raw-description (consult-jj--revision-description revision))
+                             (description     (if (string-empty-p raw-description)
+                                                  (propertize "(no description set)" 'face 'consult-jj-no-description-face)
+                                                raw-description))
+                             (bookmarks       (propertize (string-join (consult-jj--revision-bookmarks revision) " ")
+                                                          'face 'consult-jj-bookmark-face))
+                             (text            (string-trim
+                                               (string-join
+                                                (list change-id description bookmarks)
+                                                " "))))
+                        (cons text overlay)))
+     :in-place t
+     ;; overlays-in is not guaranteed to return overlays in order
+     :lessp (lambda (a b)
+              (< (overlay-start (cdr a))
+                 (overlay-start (cdr b)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; New/Edit
