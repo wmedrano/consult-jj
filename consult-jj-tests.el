@@ -102,22 +102,22 @@ Overwrites the contents if they exist."
 
 
 (defun test-wait-for-process (&optional buffer)
-  "Wait for the `jj' process running in BUFFER to finish.
-
-Polls every 100ms until the process exits, so that tests can assert on the
-asynchronously generated buffer contents.  Signals an error if the process does
-not exit in time."
+  "Wait for the `jj' process running in BUFFER to finish and run sentinels."
   (let* ((buffer         (or buffer (current-buffer)))
          (proc           (get-buffer-process buffer))
          (sleep-duration 0.1)
          (timeout        10)
          (remaining      (ceiling (/ timeout sleep-duration))))
     (while (and proc (process-live-p proc) (> remaining 0))
-      (sleep-for sleep-duration)
+      (accept-process-output proc sleep-duration)
       (setq remaining (1- remaining)))
     (when (and proc (process-live-p proc))
       (error "Process %S did not finish within %s seconds"
-             proc timeout))))
+             proc timeout))
+    ;; The process has exited.  Flush any still-pending process events so
+    ;; the sentinel has run before the caller asserts on the buffer.
+    (when proc
+      (accept-process-output proc sleep-duration))))
 
 
 
@@ -170,7 +170,7 @@ not exit in time."
         (should (stringp (car third)))
         (should (overlayp (cdr third)))))))
 
-(ert-deftest read-revision-shows-preview ()
+(ert-deftest read-revision-shows-preview-in-side-window ()
   (with-test-repo
     (test-sh "jj new")
     (let* ((got-buffer nil)
@@ -190,6 +190,33 @@ not exit in time."
       (consult-jj-read-revision "" "")
       (should-not (buffer-live-p got-buffer))
       (should-not (window-live-p got-window)))))
+
+(ert-deftest read-revision-preview-shows-revisions ()
+  (with-test-repo
+    (test-sh "jj bookmark set bookmark1"
+             "jj new"
+             "jj describe -m 'Make feature'"
+             "jj new bookmark1")
+    (let* ((rev-line
+            (concat "[a-z]\\{8\\} [^ ]+@[^ ]+ "
+                    "[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} "
+                    "[0-9]\\{2\\}:[0-9]\\{2\\}:[0-9]\\{2\\} "
+                    "\\(bookmark1 \\)?[0-9a-f]\\{8\\}"))
+           (completing-read-function
+            (lambda (_ _ &rest _)
+              (with-current-buffer "*jj-log*"
+                (should (string-match-p
+                         (concat
+                          "^@  " rev-line "\n"
+                          "│  (empty) (no description set)\n"
+                          "│ ○  " rev-line "\n"
+                          "├─╯  (empty) Make feature\n"
+                          "○  " rev-line "\n"
+                          "│  (empty) (no description set)\n"
+                          "◆  zzzzzzzz root() 00000000")
+                         (buffer-string))))
+              "")))
+      (consult-jj-read-revision "" ""))))
 
 (ert-deftest read-revision-contains-change-id-description-tags ()
   (with-test-repo
