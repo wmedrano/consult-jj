@@ -303,17 +303,33 @@ change id (trimmed to 8 characters), description, and bookmarks."
 
 (defvar consult-jj--display-function #'display-message-or-buffer)
 
-(defun consult-jj--run-command (args)
+(defun consult-jj-run-command (args)
   "Run `jj' with ARGS and display its output.
 
 Runs synchronously and signals a `jj-error' on failure."
   (with-temp-buffer
-    (let ((status (apply
-                   #'call-process consult-jj-executable nil t nil
-                   (append consult-jj-global-args args))))
+    (let* ((default-directory (consult-jj-root))
+           (status (apply
+                    #'process-file consult-jj-executable nil t nil
+                    (append consult-jj-global-args args))))
       (unless (zerop status)
         (consult-jj--signal (buffer-string)))
       (funcall consult-jj--display-function (string-trim (buffer-string))))))
+
+(defvar consult-jj--run-command-warned nil
+  "Whether the deprecation warning for `consult-jj--run-command' has been shown.")
+
+(defun consult-jj--run-command (args)
+  "Run `jj' with ARGS and display its output.
+
+Deprecated wrapper for `consult-jj-run-command'.  This function is
+obsolete and will be removed on 2026-12-01."
+  (declare (obsolete consult-jj-run-command "2026-12-01"))
+  (unless consult-jj--run-command-warned
+    (setq consult-jj--run-command-warned t)
+    (lwarn 'consult-jj :warning
+           "`consult-jj--run-command' is deprecated; use `consult-jj-run-command' instead.  It will be removed on 2026-12-01."))
+  (consult-jj-run-command args))
 
 ;;;###autoload
 (defun consult-jj-new (rev)
@@ -322,7 +338,7 @@ Runs synchronously and signals a `jj-error' on failure."
 REV is the revision.  When called interactively, prompt with `completing-read',
 defaulting to \"@\".  Runs `jj new' synchronously and displays its output."
   (interactive (list (consult-jj-read-revision "jj new" "@")))
-  (consult-jj--run-command `("new" ,rev)))
+  (consult-jj-run-command `("new" ,rev)))
 
 
 ;;;###autoload
@@ -332,7 +348,16 @@ defaulting to \"@\".  Runs `jj new' synchronously and displays its output."
 REV is the revision.  When called interactively, prompt with `completing-read',
 defaulting to \"@\".  Runs `jj edit' synchronously and displays its output."
   (interactive (list (consult-jj-read-revision "jj edit" "@")))
-  (consult-jj--run-command `("edit" ,rev)))
+  (consult-jj-run-command `("edit" ,rev)))
+
+
+;###autoload
+(defun consult-jj-git-push (rev)
+  "Push revision REV to the remote.
+
+When called interactively, prompt with `completing-read', defaulting to \"@\"."
+  (interactive (list (consult-jj-read-revision "jj git push" "@")))
+  (consult-jj-run-command `("git" "push" "-r" ,rev)))
 
 (provide 'consult-jj)
 ;;; consult-jj.el ends here

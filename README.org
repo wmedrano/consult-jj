@@ -45,26 +45,30 @@ package-install RET consult-jj RET~ or:
 
 * Functions
 
+* Generic
+
 | Functions                  | Description                                                          |
 |----------------------------+----------------------------------------------------------------------|
 | ~consult-jj-root~          | Get the root directory or signal an error if not in a JJ repository. |
 | ~consult-jj-read-revision~ | Prompt for a revision and return its change id.                      |
+| ~consult-jj-run-command~   | (Non interactive) Run a jj subcommand at the root of the repository. |
 
-* JJ Working Copy
+** JJ Working Copy
 
-| Functions         | Description                               |
-|-------------------+-------------------------------------------|
-| ~consult-jj-new~  | Create a new change on top of a revision. |
-| ~consult-jj-edit~ | Move the working copy to a revision.      |
+| Functions             | Description                                                      |
+|-----------------------+------------------------------------------------------------------|
+| ~consult-jj-new~      | Create a new change on top of a revision.                        |
+| ~consult-jj-edit~     | Move the working copy to a revision.                             |
+| ~consult-jj-git-push~ | Push a revision to the remote with ~jj git push -r~.             |
 
-* JJ Diff
+** JJ Diff
 
 | Functions              | Description                                                                                                                                                                 |
 |------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ~consult-jj-diff-at~   | Show the diff of a revision in a new ~*jj-diff*~ buffer.                                                                                                                    |
 | ~consult-jj-diff-from~ | Show the diff from a revision to the working copy in a new ~*jj-diff*~ buffer; with a prefix argument, also prompt for a second revision and show the diff between the two. |
 
-* JJ Describe
+** JJ Describe
 
 | Functions             | Description                                                     |
 |-----------------------+-----------------------------------------------------------------|
@@ -107,3 +111,24 @@ The ~jj log~ output is fontified using the following faces.
 | ~consult-jj-timestamp-face~      | ~font-lock-type-face~     | Timestamps in the jj log.                      |
 | ~consult-jj-commit-id-face~      | ~font-lock-comment-face~  | Commit ids in the jj log.                      |
 | ~consult-jj-no-description-face~ | ~font-lock-comment-face~  | "(no description set)" in the jj log.          |
+
+** Writing Your Own Commands
+
+You can build your own JJ commands by using ~consult-jj-read-revision~ to read a
+revision, and, optionally, ~consult-jj-run-command~ to run a command and output
+its result to the minibuffer.
+
+Here is an example that implements ~jj git push~:
+
+~consult-jj-read-revision~ (which prompts with the ~jj log~ shown in a side
+window) is optional — you can use any prompt mechanism and any arguments you
+like.  For instance, to push to a specific remote:
+
+#+begin_src emacs-lisp
+(defun my-consult-jj-git-push-to-remote (remote rev)
+  "Push change REV to REMOTE."
+  (interactive (list
+                (read-string "Remote: " "origin")              ;; Argument REMOTE
+                (consult-jj-read-revision "jj git push" "@"))) ;; Argument REV
+  (consult-jj-run-command `("git" "push" "--remote" ,remote "-r" ,rev)))
+#+end_src

@@ -114,16 +114,16 @@ Overwrites the contents if they exist."
     (when (and proc (process-live-p proc))
       (error "Process %S did not finish within %s seconds"
              proc timeout))
-    ;; The process has exited.  Flush any still-pending process events so
-    ;; the sentinel has run before the caller asserts on the buffer.
+    ;; The process has exited.  Flush any still-pending process events so the
+    ;; sentinel has run before the caller asserts on the buffer.
     (when proc
       (accept-process-output proc sleep-duration))))
 
 
 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; root
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; root
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest root-returns-root-directory ()
   (with-test-repo
@@ -146,9 +146,9 @@ Overwrites the contents if they exist."
       (delete-directory temp-dir t))))
 
 ;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; read revision
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; read revision
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest read-revision-returns-all-revisions ()
   (with-test-repo
@@ -279,10 +279,46 @@ Overwrites the contents if they exist."
       (should (equal result expected)))))
 
 
-;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; new
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; run command
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(ert-deftest run-command-success-creates-change-and-displays-output ()
+  (with-test-repo
+    (let ((initial-change-id (test-jj-change-id "@"))
+          (displayed-output  nil))
+      (cl-letf (((default-value 'consult-jj--display-function)
+                 (lambda (output) (setq displayed-output output))))
+        (consult-jj-run-command '("new")))
+      (should-not (equal initial-change-id
+                         (test-jj-change-id "@")))
+      (should (string-match-p "Working copy .* now at: "
+                              displayed-output)))))
+
+(ert-deftest run-command-failure-signals-error ()
+  (with-test-repo
+    (should-error (consult-jj-run-command '("command-does-not-exist"))
+                  :type 'jj-error)))
+
+(ert-deftest run-command-deprecated-alias-runs-and-warns ()
+  (with-test-repo
+    (let (warnings)
+      (cl-letf (((symbol-function 'lwarn)
+                 (lambda (&rest args) (push args warnings)))
+                (consult-jj--run-command-warned nil))
+        (with-no-warnings
+          (consult-jj--run-command '("log" "--limit" "2"))))
+      (should warnings)
+      (should (string-match-p
+               "consult-jj--run-command' is deprecated"
+               (format "%S" (car warnings)))))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; new
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest new-creates-new-revision ()
   (with-test-repo
@@ -314,9 +350,9 @@ Overwrites the contents if they exist."
                   :type 'jj-error)))
 
 ;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; edit
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; edit
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest edit-moves-working-copy-to-specified-revision ()
   (with-test-repo
@@ -345,9 +381,9 @@ Overwrites the contents if they exist."
 
 
 ;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; describe
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; describe
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest describe-creates-buffer-with-mode-and-description ()
   (with-test-repo
@@ -497,10 +533,10 @@ new file mode 100644\nindex 0000000000..86436d0dd5
                     :type 'user-error))))
 
 
-;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; diff at
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; diff at
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest diff-at-creates-jj-diff-buffer ()
   (with-test-repo
@@ -554,10 +590,10 @@ index 0000000000..2ceb84c5b3
         (kill-buffer diff-buffer)))))
 
 
-;; 
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; diff from
-;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; diff from
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ert-deftest diff-from-creates-jj-diff-buffer ()
   (with-test-repo
