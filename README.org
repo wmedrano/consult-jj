@@ -55,11 +55,13 @@ package-install RET consult-jj RET~ or:
 
 ** JJ Working Copy
 
-| Functions             | Description                                                      |
-|-----------------------+------------------------------------------------------------------|
-| ~consult-jj-new~      | Create a new change on top of a revision.                        |
-| ~consult-jj-edit~     | Move the working copy to a revision.                             |
-| ~consult-jj-git-push~ | Push a revision to the remote with ~jj git push -r~.             |
+| Functions              | Description                                          |
+|------------------------+------------------------------------------------------|
+| ~consult-jj-new~       | Create a new change on top of a revision.            |
+| ~consult-jj-edit~      | Move the working copy to a revision.                 |
+| ~consult-jj-git-push~  | Push a revision to the remote with ~jj git push -r~. |
+| ~consult-jj-abandon~   | Abandon a revision with ~jj abandon~.                |
+| ~consult-jj-duplicate~ | Duplicate a revision with ~jj duplicate~.            |
 
 ** JJ Diff
 

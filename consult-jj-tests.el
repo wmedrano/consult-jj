@@ -242,6 +242,26 @@ Overwrites the contents if they exist."
       (consult-jj-read-revision "my-prefix" "default-rev")
       (should (equal "my-prefix revision (default default-rev): " got-prompt)))))
 
+(ert-deftest read-revision-with-no-default-omits-default-from-prompt ()
+  (with-test-repo
+    (let* ((got-prompt nil)
+           (completing-read-function (lambda (prompt _ &rest _)
+                                       (setq got-prompt prompt)
+                                       "")))
+      (should (equal nil (consult-jj-read-revision "my-prefix" nil)))
+      (should (equal "my-prefix revision: " got-prompt)))))
+
+(ert-deftest read-revision-with-arbitrary-default-returns-that-default ()
+  (with-test-repo
+    (let* ((got-prompt nil)
+           (completing-read-function (lambda (prompt _ &rest _)
+                                       (setq got-prompt prompt)
+                                       "")))
+      (should (equal '(1 2 3)
+                     (consult-jj-read-revision "my-prefix" '(1 2 3))))
+      (should (string-equal "my-prefix revision (default (1 2 3)): "
+                            got-prompt)))))
+
 (ert-deftest read-revision-empty-string-selected-returns-default ()
   (with-test-repo
     (test-sh
@@ -377,6 +397,59 @@ Overwrites the contents if they exist."
 (ert-deftest edit-errors-on-unresolvable-revision ()
   (with-test-repo
     (should-error (consult-jj-edit "no-such-revision")
+                  :type 'jj-error)))
+
+
+;; 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; abandon
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(ert-deftest abandon-removes-revision ()
+  (with-test-repo
+    (test-sh
+     "jj new"
+     "printf 'Doomed\n' | jj describe --stdin")
+    (let* ((abandon-change-id (test-jj-change-id "@"))
+           (root-change-id    (test-jj-change-id "@-")))
+      (consult-jj-abandon abandon-change-id)
+      (should-not (equal abandon-change-id
+                         (test-jj-change-id "@")))
+      (should (equal root-change-id
+                     (test-jj-change-id "@-")))
+      (with-temp-buffer
+        (should-not (zerop (call-process "jj" nil t nil
+                                         "log" "-r" abandon-change-id)))))))
+
+(ert-deftest abandon-errors-on-unresolvable-revision ()
+  (with-test-repo
+    (should-error (consult-jj-abandon "no-such-revision")
+                  :type 'jj-error)))
+
+
+;; 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; duplicate
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(ert-deftest duplicate-creates-copy-of-revision ()
+  (with-test-repo
+    (test-sh
+     "printf 'Original\n' | jj describe --stdin")
+    (let* ((original-change-id (test-jj-change-id "@")))
+      (consult-jj-duplicate "@")
+      (should (equal original-change-id
+                     (test-jj-change-id "@")))
+      (with-temp-buffer
+        (should (zerop (call-process "jj" nil t nil "log" "--no-graph"
+                                     "-T" "description")))
+        (goto-char (point-min))
+        (should (equal 2
+                       (count-matches "^Original$")))))))
+
+(ert-deftest duplicate-errors-on-unresolvable-revision ()
+  (with-test-repo
+    (should-error (consult-jj-duplicate "no-such-revision")
                   :type 'jj-error)))
 
 

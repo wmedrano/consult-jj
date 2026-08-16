@@ -152,7 +152,7 @@ ON-DONE is called in the process buffer when the process exits."
   "Read a revision from the user.
 
 PROMPT-PREFIX is prepended to the prompt.
-DEFAULT-REVISION is offered as the default."
+DEFAULT-REVISION is returned if the user selects the empty string."
   (let* ((jj-log-buffer     (consult-jj--log))
          (jj-log-window     (display-buffer-in-side-window
                              jj-log-buffer
@@ -164,17 +164,19 @@ DEFAULT-REVISION is offered as the default."
                               (consult-jj--read-revision-update-highlights
                                candidates default-revision)))
          ;; The candidates are already sorted by `jj log' output.
-         (vertico-sort-function nil))
+         (vertico-sort-function nil)
+         (prompt            (if default-revision
+                                (format "%s revision (default %s): "
+                                        prompt-prefix default-revision)
+                              (format "%s revision: " prompt-prefix))))
     (unwind-protect
         (let ((rev
                (minibuffer-with-setup-hook
                    (lambda ()
                      (add-hook 'post-command-hook update-highlights nil t))
-                 (completing-read
-                  (format "%s revision (default %s): " prompt-prefix default-revision)
-                  candidates))))
+                 (completing-read prompt candidates))))
           (cond
-           ;; Empty -> Default
+           ;; Empty -> Default, or nil if there is none
            ((string-empty-p rev) default-revision)
            ;; Revision -> Change ID
            ((assoc rev candidates)
@@ -201,7 +203,8 @@ If the candidate selection is empty, then DEFAULT-REVISION is used."
               overlay
               'face
               (when (or (string= candidate selected)
-                        (and (string= "@" default-revision)
+                        (and default-revision
+                             (string= "@" default-revision)
                              (or (string= "@" selected) (string= "" selected))
                              (consult-jj--revision-current-working-copy-p revision)))
                 'consult-jj-selected-face)))))
@@ -345,19 +348,38 @@ defaulting to \"@\".  Runs `jj new' synchronously and displays its output."
 (defun consult-jj-edit (rev)
   "Move the working copy to revision REV.
 
-REV is the revision.  When called interactively, prompt with `completing-read',
-defaulting to \"@\".  Runs `jj edit' synchronously and displays its output."
+ When called interactively, prompt with `completing-read', defaulting to \"@\".
+Runs `jj edit' synchronously and displays its output."
   (interactive (list (consult-jj-read-revision "jj edit" "@")))
   (consult-jj-run-command `("edit" ,rev)))
 
 
-;###autoload
+;;;###autoload
 (defun consult-jj-git-push (rev)
   "Push revision REV to the remote.
 
 When called interactively, prompt with `completing-read', defaulting to \"@\"."
   (interactive (list (consult-jj-read-revision "jj git push" "@")))
   (consult-jj-run-command `("git" "push" "-r" ,rev)))
+
+;;;###autoload
+(defun consult-jj-abandon (rev)
+  "Abandon revision REV.
+
+REV is the revision.  When called interactively, prompt with `completing-read'.
+Runs `jj abandon' synchronously and displays its output."
+  (interactive (list (or (consult-jj-read-revision "jj abandon" nil)
+                         (user-error "No revision selected"))))
+  (consult-jj-run-command `("abandon" ,rev)))
+
+;;;###autoload
+(defun consult-jj-duplicate (rev)
+  "Duplicate revision REV.
+
+When called interactively, prompt with `completing-read', defaulting to \"@\".
+Runs `jj duplicate' synchronously and displays its output."
+  (interactive (list (consult-jj-read-revision "jj duplicate" "@")))
+  (consult-jj-run-command `("duplicate" ,rev)))
 
 (provide 'consult-jj)
 ;;; consult-jj.el ends here
